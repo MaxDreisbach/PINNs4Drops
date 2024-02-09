@@ -131,19 +131,19 @@ def testPRT(dir_path, n=10): #10
     
     #NEW: Check if mesh was already rendered and skip
     bounce_path = os.path.join(dir_path, 'bounce')
-    if os.path.exists(bounce_path):
-      print("skipping already rendered file: %s" % folder)
-    else:
-      print("Computing spherical harmonics for %s mesh" % sub_name)
-      os.makedirs(os.path.join(dir_path, 'bounce'), exist_ok=True)
-  
-      PRT, F = computePRT(obj_path, n, 2)
-      np.savetxt(os.path.join(dir_path, 'bounce', 'bounce0.txt'), PRT, fmt='%.8f')
-      np.save(os.path.join(dir_path, 'bounce', 'face.npy'), F)
+    #if os.path.exists(bounce_path):
+    #  print("skipping already rendered file: %s" % folder)
+    #else:
+    print("Computing spherical harmonics for %s mesh" % sub_name)
+    os.makedirs(os.path.join(dir_path, 'bounce'), exist_ok=True)
+
+    PRT, F = computePRT(obj_path, n, 2)
+    np.savetxt(os.path.join(dir_path, 'bounce', 'bounce0.txt'), PRT, fmt='%.8f')
+    np.save(os.path.join(dir_path, 'bounce', 'face.npy'), F)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, default='./render/Fink2018_structured_2023')
+    parser.add_argument('-i', '--input', type=str, default='./render/Burgmann_2023_droplet_shear_flow')
     parser.add_argument('-n', '--n_sample', type=int, default=40, help='squared root of number of sampling. the higher, the more accurate, but slower') #40
     args = parser.parse_args()
 
@@ -153,6 +153,8 @@ if __name__ == '__main__':
         print(file_name)
         subfolders.extend(file_name)
         break
+
+    subfolders.sort()
 
     print("Computing spherical harmonics for %s mesh files" % len(subfolders))
     for folder in subfolders:

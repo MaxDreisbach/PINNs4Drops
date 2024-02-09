@@ -8,11 +8,11 @@ import time
 
 ### Input dirs
 # synthetic renders from blender
-in_path = "../../../Projects/PIFu-master/train_data_DFS2023C/GEO/OBJ/"
-render_path = "../../../Projects/Blender_96_3/denoised/"
+in_path = "../train_data_DSH2024/GEO/OBJ/"
+render_path = "../../Blender_droplet_shear_flow/denoised/"
 
 ### Ouput dirs
-train_path = "../train_data_DFS2024A/RENDER/"
+train_path = "../train_data_DSH2024/RENDER/"
 
 ### Starting mesh
 START = 0
@@ -87,7 +87,6 @@ for count,filename in enumerate(filenames):
         start_time = time.time()
         copy_render(render_path, filename, train_path, angle_step=10)
         print("--- {0} of {1}: {2:.2f} s to copy renders of {3} ---".format(count+START, len(filenames)+START, (time.time() - start_time), filename))
-
 
 
 

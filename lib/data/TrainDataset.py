@@ -72,24 +72,21 @@ class TrainDataset(Dataset):
 
         # Path setup
         self.root = self.opt.dataroot
-        # TODO: change Render path back to default after training on monocromatic dataset
         self.RENDER = os.path.join(self.root, 'RENDER')
-        self.RENDER = os.path.join('../PIFu-master/train_data_DFS2024D/RENDER')
         print('Render path: ', self.RENDER)
 
         self.MASK = os.path.join(self.root, 'MASK')
-        # NEW: Override with empty mask to avoid possible contour deletion
-        # self.MASK = os.path.join('./train_data_DFS2023M/MASK')
+        #self.MASK = os.path.join('../PIFu-master/train_data_DFS2023C', 'MASK')
         self.PARAM = os.path.join(self.root, 'PARAM')
+        #self.PARAM = os.path.join('../PIFu-master/train_data_DFS2023C', 'PARAM')
         self.UV_MASK = os.path.join(self.root, 'UV_MASK')
         self.UV_NORMAL = os.path.join(self.root, 'UV_NORMAL')
         self.UV_RENDER = os.path.join(self.root, 'UV_RENDER')
         self.UV_POS = os.path.join(self.root, 'UV_POS')
-        self.OBJ = os.path.join(self.root, 'GEO', 'OBJ')
+        self.OBJ = os.path.join('../PIFu-master/train_data_DFS2023C', 'GEO', 'OBJ')
         self.VEL = os.path.join(self.root, 'VEL')
         self.PRES = os.path.join(self.root, 'PRES')
         self.TIME = os.path.join(self.root, 'TIME')
-        self.MESHGRID = os.path.join(self.root, 'MESHGRID')
 
         self.B_MIN = np.array([-128, -28, -128])
         self.B_MAX = np.array([128, 228, 128])
@@ -127,6 +124,37 @@ class TrainDataset(Dataset):
         ''' modified GEO to only load required meshes -> now implemented in select_sampling_method() lines 265ff.'''
         # self.mesh_dic = load_trimesh(self.OBJ)
         self.mesh_dic = []
+
+    def debug_sampling_points(self, render_data, sample_data):
+
+        orimg = np.uint8((np.transpose(render_data['img'][0].numpy(), (1, 2, 0)) * 0.5 + 0.5)[:, :, :] * 255.0)
+        rot = render_data['calib'][0, :3, :3]
+        trans = render_data['calib'][0, :3, 3:4]
+
+        inside_pts = torch.addmm(trans, rot, sample_data['samples'][:, sample_data['labels'][0] > 0.5])  # [3, N]
+        pts = 0.5 * (inside_pts.numpy().T + 1.0) * render_data['img'].size(2)
+        img = orimg.copy()
+        for p in pts:
+            img = cv2.circle(img, (p[0], p[1]), 0, (0, 255, 0), -1)
+
+        plt.imshow(img)
+        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        plt.show()
+
+        cv2.imwrite('inside.png', img)
+
+        outside_pts = torch.addmm(trans, rot, sample_data['samples'][:, sample_data['labels'][0] < 0.5])  # [3, N]
+        pts = 0.5 * (outside_pts.numpy().T + 1.0) * render_data['img'].size(2)
+        img = orimg.copy()
+        for p in pts:
+            img = cv2.circle(img, (p[0], p[1]), 0, (255, 0, 255), -1)
+
+        plt.imshow(img)
+        plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
+        plt.show()
+
+        cv2.imwrite('outside.png', img)
+
 
     def get_subjects(self):
         all_subjects = os.listdir(self.RENDER)
@@ -188,6 +216,11 @@ class TrainDataset(Dataset):
             center = param.item().get('center')
             # model rotation
             R = param.item().get('R')
+
+            #print('ortho_ratio: ', ortho_ratio)
+            #print('scale: ', scale)
+            #print('center: ', center)
+            #print('R: ', R)
 
             translate = -np.matmul(R, center).reshape(3, 1)
             extrinsic = np.concatenate([R, translate], axis=1)
@@ -262,6 +295,8 @@ class TrainDataset(Dataset):
             intrinsic = np.matmul(trans_intrinsic, np.matmul(uv_intrinsic, scale_intrinsic))
             calib = torch.Tensor(np.matmul(intrinsic, extrinsic)).float()
             extrinsic = torch.Tensor(extrinsic).float()
+
+            #print('calib: ',calib)
 
             mask = transforms.Resize(self.load_size)(mask)
             mask = transforms.ToTensor()(mask).float()
@@ -536,14 +571,8 @@ class TrainDataset(Dataset):
             sample_data = self.select_sampling_method(subject)
             res.update(sample_data)
 
-        img = np.uint8((np.transpose(render_data['img'][0].numpy(), (1, 2, 0)) * 0.5 + 0.5)[:, :, ::-1] * 255.0)
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        filename = 'x_debug/train_img_%s.png' % sid
-        cv2.imwrite(filename, img)
-        # import matplotlib.pyplot as plt
-        # plt.imshow(img, cmap = 'gray', interpolation = 'bicubic')
-        # plt.xticks([]), plt.yticks([])  # to hide tick values on X and Y axis
-        # plt.show()
+        ''' Plot inside and outside sampling'''
+        #self.debug_sampling_points(render_data, sample_data)
 
         if self.num_sample_color:
             color_data = self.get_color_sampling(subject, yid=yid, pid=pid)

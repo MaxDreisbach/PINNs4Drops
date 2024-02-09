@@ -13,8 +13,10 @@ import random
 import pyexr
 import argparse
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 #from pyexr import write
 
+DEBUG = True
 
 def make_rotate(rx, ry, rz):
     sinX = np.sin(rx)
@@ -149,8 +151,8 @@ def rotateBand2(x, R):
 def render_prt_ortho(out_path, folder_name, subject_name, shs, rndr, rndr_uv, im_size, angl_step=10, n_light=1, pitch=[0]):
     cam = Camera(width=im_size, height=im_size)
     cam.ortho_ratio = 0.4 * (512 / im_size)
-    cam.near = -100
-    cam.far = 100
+    cam.near = -100 #-100
+    cam.far = 100 # 100
     cam.sanity_check()
 
     # set path for obj, prt
@@ -181,17 +183,17 @@ def render_prt_ortho(out_path, folder_name, subject_name, shs, rndr, rndr_uv, im
     
     vmed = np.median(vertices, 0)
     vmed[up_axis] = 0.5*(vmax[up_axis]+vmin[up_axis])
+    print('original vmed', vmed)
     y_scale = 180/(vmax[up_axis] - vmin[up_axis])
 
 
     #--- NEW ---#
     print("#--- Hard coded median vertex and scale for renderer to match Blender render results---#")
-    #y_scale = 1.025+0.0025
-    y_scale = 0.74765 #scale constant for new large dataset
-    y_scale = 0.75125
-    #vmed = np.array([0, 52.375, 0])
-    #higher values create lower position
-    vmed = np.array([0, 117, 0])
+    y_scale = 0.74425
+    #higher values move mask down
+    # vmed = np.array([0, 117.375, 0]) #highest position
+    corrector = (vmed[1] - 19.2808365) * 0.00982629366 # linear interpolation between highest and lowest position
+    vmed = np.array([0, 118.175-corrector, 0])  # lowest position
 
     print("Vmedian")
     print(vmed)
@@ -226,9 +228,9 @@ def render_prt_ortho(out_path, folder_name, subject_name, shs, rndr, rndr_uv, im
         f.close()
 
     # copy obj file
-    cmd = 'cp %s %s' % (mesh_file, os.path.join(out_path, 'GEO', 'OBJ', subject_name))
-    print(cmd)
-    os.system(cmd)
+    #cmd = 'cp %s %s' % (mesh_file, os.path.join(out_path, 'GEO', 'OBJ', subject_name))
+    #print(cmd)
+    #os.system(cmd)
 
     for p in pitch:
         # Change for-loop to y=0 statement to only render one view
@@ -261,9 +263,29 @@ def render_prt_ortho(out_path, folder_name, subject_name, shs, rndr, rndr_uv, im
                 out_mask = out_all_f[:,:,3]
                 out_all_f = cv2.cvtColor(out_all_f, cv2.COLOR_RGBA2BGR)
 
+                # Using cv2.dilate() method to make mask 1-2px larger than droplet boundary
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                out_mask_dil = cv2.dilate(out_mask, kernel)
+
+                # non-dilated mask for ground to preserve wetting of structure
+                out_mask[:477, :] = out_mask_dil[:477, :]
+
                 np.save(os.path.join(out_path, 'PARAM', subject_name, '%d_%d_%02d.npy'%(y,p,j)),dic)
                 cv2.imwrite(os.path.join(out_path, 'RENDER', subject_name, '%d_%d_%02d.jpg'%(y,p,j)),255.0*out_all_f)
                 cv2.imwrite(os.path.join(out_path, 'MASK', subject_name, '%d_%d_%02d.png'%(y,p,j)),255.0*out_mask)
+
+                ''' DEBUG: Plot masked image'''
+                if DEBUG:
+                    #synthetic_image_path = os.path.join('../PIFu-master/train_data_DFS2024D/RENDER',subject_name, '%d_%d_%02d.png'%(y,p,j))
+                    synthetic_image_path = os.path.join('./train_data_DFS2024D/RENDER', subject_name, '%d_%d_%02d.png' % (y, p, j))
+                    synth_im = cv2.imread(synthetic_image_path)
+                    #synth_im = cv2.cvtColor(synth_im, cv2.COLOR_BGR2RGB)
+
+                    synth_im[out_mask == 0] = 255
+
+                    fig, ax = plt.subplots()
+                    im = ax.imshow(synth_im)
+                    plt.show()
 
 
                 renderUV = True
@@ -303,8 +325,8 @@ if __name__ == '__main__':
     shs = np.load('./env_sh.npy')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, default='./render/Fink2018_structured_2023')
-    parser.add_argument('-o', '--out_dir', type=str, default='./train_data')
+    parser.add_argument('-i', '--input', type=str, default='../PIFu-master/render/Fink2018_structured_2023')
+    parser.add_argument('-o', '--out_dir', type=str, default='./train_data_DFS2024D')
     parser.add_argument('-m', '--ms_rate', type=int, default=1, help='higher ms rate results in less aliased output. MESA renderer only supports ms_rate=1.')
     parser.add_argument('-e', '--egl',  action='store_true', help='egl rendering option. use this when rendering with headless server with NVIDIA GPU')
     parser.add_argument('-s', '--size',  type=int, default=512, help='rendering image size')
@@ -324,6 +346,8 @@ if __name__ == '__main__':
         subfolders.extend(dirnames)
         break
 
+    subfolders.sort()
+    subfolders = subfolders[930:]
     print(subfolders)
 
     for idx,folder in enumerate(subfolders):
@@ -337,11 +361,7 @@ if __name__ == '__main__':
         #NEW: Check if mesh was already rendered and skip
         render_path = os.path.join(args.out_dir, 'RENDER', subject_name)
         print(render_path)
-        if os.path.exists(render_path):
-          print("skipping already rendered file: %s" % subject_name)
-        else:
-          print("Rendering ", idx, " of ", len(subfolders))
-          render_prt_ortho(args.out_dir, input_path, subject_name, shs, rndr, rndr_uv, args.size, 1, 1, pitch=[0])
+        render_prt_ortho(args.out_dir, input_path, subject_name, shs, rndr, rndr_uv, args.size, 1, 1, pitch=[0])
 
 
 

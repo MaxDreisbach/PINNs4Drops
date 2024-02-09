@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
 from scipy.interpolate import griddata
+import pyvista
 
 def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name, dataset_type):
     sample_x = samples[0, 0, :].detach().cpu().numpy()
@@ -15,7 +16,12 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
 
     # interpolate point cloud to 2D-plane
     grid_res = complex(0, opt.resolution)
-    X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
+    if plane_dim == 'x':
+        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
+    if plane_dim == 'y':
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
+    if plane_dim == 'z':
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
 
     pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
     pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
@@ -26,14 +32,14 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
     label_interpn[np.isnan(label_interpn)] = label_linear[np.isnan(label_interpn)]
 
     if plane_dim == 'x':
-        var_plot = pred_interpn[0, :, :].T
-        gt_plot = label_interpn[0, :, :].T
+        var_plot = np.squeeze(pred_interpn[0, :, :])
+        gt_plot = np.squeeze(label_interpn[0, :, :])
     if plane_dim == 'y':
-        var_plot = pred_interpn[:, 0, :].T
-        gt_plot = label_interpn[:, 0, :].T
+        var_plot = np.squeeze(pred_interpn[:, 0, :].T)
+        gt_plot = np.squeeze(label_interpn[:, 0, :].T)
     if plane_dim == 'z':
-        var_plot = pred_interpn[:, :, 0].T
-        gt_plot = label_interpn[:, :, 0].T
+        var_plot = np.squeeze(pred_interpn[:, :, 0].T)
+        gt_plot = np.squeeze(label_interpn[:, :, 0].T)
 
     err_plot = np.absolute(gt_plot - var_plot)
 
@@ -44,7 +50,7 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
         levels = np.linspace(-1.5, 1.5, 10)
         colormap = 'RdBu_r'
     if type == 'pres':
-        levels = np.linspace(-1.2, 4.0, 10)
+        levels = np.linspace(-0.6, 2.0, 10)
         colormap = 'viridis'
 
     fig, axs = plt.subplots(1, 3, figsize=(17, 5))
@@ -54,6 +60,100 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
     axs[0].contourf(var_plot, levels=levels, cmap=colormap)
     axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
     axs[2].contourf(err_plot, cmap=colormap)
+
+    axs[0].set_ylabel('y', fontsize=16)
+    axs[0].set_xlabel('x', fontsize=16)
+    axs[1].set_xlabel('x', fontsize=16)
+    axs[2].set_xlabel('x', fontsize=16)
+
+
+    axs[0].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
+    axs[1].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
+    axs[2].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
+
+    axs[0].set_title(r'{0} pred'.format(name), fontsize=16, y=1, pad=20 )
+    axs[1].set_title(r'{0} gt'.format(name), fontsize=16, y=1, pad=20)
+    axs[2].set_title(r'{0} err'.format(name), fontsize=16, y=1, pad=20)
+
+    plt.tight_layout(w_pad=4.5)
+    axs[0].set_aspect('equal', adjustable="datalim")
+    axs[1].set_aspect('equal', adjustable="datalim")
+    axs[2].set_aspect('equal', adjustable="datalim")
+    fig.colorbar(p1, ax=axs[0], location='bottom')
+    fig.colorbar(p2, ax=axs[1], location='bottom')
+    fig.colorbar(p3, ax=axs[2], location='bottom')
+    filename = 'results/'+ dataset_type + '_' + sample_name + '_' + name + '_pred.pdf'
+    plt.savefig(filename)
+    #plt.show()
+
+def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, type, sample_name, dataset_type):
+    sample_x = samples[0, 0, :].detach().cpu().numpy()
+    sample_y = samples[0, 1, :].detach().cpu().numpy()
+    sample_z = samples[0, 2, :].detach().cpu().numpy()
+    sample = np.vstack((sample_x, sample_y, sample_z)).T
+    #sample = samples.detach().cpu().numpy()
+    label = labels.detach().cpu().numpy()
+    pred = preds.detach().cpu().numpy()
+    alpha = alpha.detach().cpu().numpy()
+
+    # interpolate point cloud to 2D-plane
+    grid_res = complex(0, opt.resolution)
+    if plane_dim == 'x':
+        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
+    if plane_dim == 'y':
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
+    if plane_dim == 'z':
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
+
+    pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
+    pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
+    pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
+
+    label_interpn = griddata(sample, label, (X,Y,Z), method='linear')
+    label_linear = griddata(sample, label, (X,Y,Z), method='nearest')
+    label_interpn[np.isnan(label_interpn)] = label_linear[np.isnan(label_interpn)]
+
+    alpha_interpn = griddata(sample, alpha, (X, Y, Z), method='linear')
+    alpha_linear = griddata(sample, alpha, (X, Y, Z), method='nearest')
+    alpha_interpn[np.isnan(alpha_interpn)] = alpha_linear[np.isnan(alpha_interpn)]
+
+    if plane_dim == 'x':
+        var_plot = np.squeeze(pred_interpn[0, :, :])
+        gt_plot = np.squeeze(label_interpn[0, :, :])
+        alpha_plot = np.squeeze(alpha_interpn[0, :, :])
+    if plane_dim == 'y':
+        var_plot = np.squeeze(pred_interpn[:, 0, :].T)
+        gt_plot = np.squeeze(label_interpn[:, 0, :].T)
+        alpha_plot = np.squeeze(alpha_interpn[:, 0, :].T)
+    if plane_dim == 'z':
+        var_plot = np.squeeze(pred_interpn[:, :, 0].T)
+        gt_plot = np.squeeze(label_interpn[:, :, 0].T)
+        alpha_plot = np.squeeze(alpha_interpn[:, :, 0].T)
+
+    err_plot = np.absolute(gt_plot - var_plot)
+
+    if type == 'alpha':
+        levels = np.linspace(0, 1.0, 10)
+        colormap = 'RdBu_r'
+    if type == 'vel':
+        levels = np.linspace(-1.5, 1.5, 10)
+        colormap = 'RdBu_r'
+    if type == 'pres':
+        levels = np.linspace(-0.6, 2.0, 10)
+        colormap = 'viridis'
+
+    fig, axs = plt.subplots(1, 3, figsize=(17, 5))
+    p1 = axs[0].contourf(var_plot, levels=levels, cmap=colormap)
+    p2 = axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
+    p3 = axs[2].contourf(err_plot, cmap=colormap)
+    axs[0].contourf(var_plot, levels=levels, cmap=colormap)
+    axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
+    axs[2].contourf(err_plot, cmap=colormap)
+
+    levels_alpha = np.linspace(0.5, 1.0, 2)
+    a1 = axs[0].contour(alpha_plot, levels=levels_alpha, colors='k')
+    a2 = axs[1].contour(alpha_plot, levels=levels_alpha, colors='k')
+    a3 = axs[2].contour(alpha_plot, levels=levels_alpha, colors='k')
 
     axs[0].set_ylabel('y', fontsize=16)
     axs[0].set_xlabel('x', fontsize=16)
@@ -192,48 +292,82 @@ def plot_velocity_field(samples, preds, labels_u, labels_v, labels_w):
     ax.set_zlabel('$Z$')
     plt.show()
 
-def plot_backup():
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='3d')
 
-    num_plot = num_samples // num_samples
-    x = coords[0, :]
-    y = coords[1, :]
-    z = coords[2, :]
-    a = sdf[::num_plot]
+def plot_iso_surface(opt, samples, preds, labels, name, sample_name, dataset_type):
+    sample_x = samples[0, 0, :].detach().cpu().numpy()
+    sample_y = samples[0, 1, :].detach().cpu().numpy()
+    sample_z = samples[0, 2, :].detach().cpu().numpy()
+    sample = np.vstack((sample_x, sample_y, sample_z)).T
+    #sample = samples.detach().cpu().numpy()
+    label = labels.detach().cpu().numpy()
+    pred = preds.detach().cpu().numpy()
 
-    plane_dim = z
-    xp = x[0.0 < plane_dim]
-    yp = y[0.0 < plane_dim]
+    # interpolate point cloud to 2D-plane
+    grid_res = complex(0, opt.resolution)
+    X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -128:128:grid_res]
 
-    a = a[0.0 < plane_dim]
-    u = u[0.0 < plane_dim]
-    v = v[0.0 < plane_dim]
-    w = w[0.0 < plane_dim]
-    p = p[0.0 < plane_dim]
-    zp = z[0.0 < plane_dim]
+    pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
+    pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
+    pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
 
-    plane_dim = zp
-    xp = xp[5.0 > plane_dim]
-    yp = yp[5.0 > plane_dim]
+    label_interpn = griddata(sample, label, (X,Y,Z), method='linear')
+    label_linear = griddata(sample, label, (X,Y,Z), method='nearest')
+    label_interpn[np.isnan(label_interpn)] = label_linear[np.isnan(label_interpn)]
 
-    a = a[5.0 > plane_dim]
-    u = u[5.0 > plane_dim]
-    v = v[5.0 > plane_dim]
-    w = w[5.0 > plane_dim]
-    p = p[5.0 > plane_dim]
-    zp = zp[5.0 > plane_dim]
 
-    ax.scatter(xp, yp, zp, s=10, c=p, cmap='viridis')
-    # ax.scatter(xp, yp, zp, s=10, c=w, vmin=-1.5, vmax=1.5, cmap='bwr')
-    # ax.scatter(xp, yp, zp, s=10, c=u, vmin=-0.1, vmax=0.1, cmap='bwr')
-    # ax.scatter(x, y, z, s=10, c=sdf_plot, cmap='bwr')
-    ax.set_xlabel('$X$')
-    ax.set_ylabel('$Y$')
-    ax.set_zlabel('$Z$')
-    # ax.set_ylim3d(ymin, yground)
-    # ax.set_zlim3d(zmin, zmax)
-    ax.set_box_aspect((1, 1, 1))
-    plt.show()
-    plt.savefig('pred.png')
-    # plt.waitforbuttonpress()
+    mesh = pyvista.StructuredGrid(X, Y, Z)
+    mesh.point_data['values'] = pred_interpn.ravel(order='F')
+
+    vmin = pred.min()
+    vmax = pred.max()
+    labels = dict(zlabel='Z', xlabel='X', ylabel='Y')
+    contours = mesh.contour(np.linspace(vmin, vmax, 10))
+
+    camera = pyvista.Camera()
+    camera.position = (700.0, 100.0, 700.0)
+    camera.focal_point = (5.0, 20.0, 5.0)
+
+    p = pyvista.Plotter(off_screen=True)
+    p.add_mesh(mesh.outline(), color="k")
+    p.add_mesh(contours, opacity=0.25, clim=[vmin, vmax])
+    p.show_grid(**labels)
+    p.add_axes(**labels)
+
+    p.camera = camera
+    filename = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred_3d.svg'
+    p.save_graphic(filename)
+    #p.screenshot(filename, transparent_background=True)
+    p.close()
+
+    meshname = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred_3d.vtk'
+    mesh.save(meshname)
+
+def gen_vtk_prediction(coords, preds, name, sample_name):
+    X = coords[0, :, :, :]
+    Y = coords[1, :, :, :]
+    Z = coords[2, :, :, :]
+
+    mesh = pyvista.StructuredGrid(X, Y, Z)
+    mesh.point_data['values'] = preds.ravel(order='F')
+
+    DISPLAY_RESULTS = True
+    if DISPLAY_RESULTS:
+        vmin = preds.min()
+        vmax = preds.max()
+        labels = dict(zlabel='Z', xlabel='X', ylabel='Y')
+        contours = mesh.contour(np.linspace(vmin, vmax, 10))
+
+        camera = pyvista.Camera()
+        camera.position = (700.0, 100.0, 700.0)
+        camera.focal_point = (5.0, 20.0, 5.0)
+
+        p = pyvista.Plotter(off_screen=True)
+        p.add_mesh(mesh.outline(), color="k")
+        p.add_mesh(contours, opacity=0.25, clim=[vmin, vmax])
+        p.show_grid(**labels)
+        p.add_axes(**labels)
+        p.camera = camera
+        p.show()
+
+    meshname = sample_name + '_' + name + '_pred_3d.vtk'
+    mesh.save(meshname)

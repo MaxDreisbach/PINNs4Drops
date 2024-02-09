@@ -17,7 +17,7 @@ def normalize(data, min, max):
     return (data - min) / (max - min)
 
 
-def de_normalize(data, min, max):
+def de_norm(data, min, max):
     return data * (max - min) + min
 
 
@@ -98,23 +98,29 @@ class HGPIFuNet(BasePIFuNet):
 
         init_net(self)
 
+    def diff_xyz_de_norm(self, data):
+        return data / (self.xmax - self.xmin)
+
+    def diff_t_de_norm(self, data):
+        return data / (self.tmax - self.tmin)
+
     def get_non_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
-        alpha = self.pred[:, 0, :]
-        u = de_normalize(self.pred[:, 1, :], -5.0, 5.0)
-        v = de_normalize(self.pred[:, 2, :], -2.0, 4.5)
-        w = de_normalize(self.pred[:, 3, :], -5.0, 5.0)
-        p = de_normalize(self.pred[:, 4, :], -1.25, 4.0)
+        alpha = self.preds[:, 0, :]
+        u = de_norm(self.pred[:, 1, :], -5.0, 5.0)
+        v = de_norm(self.pred[:, 2, :], -2.0, 4.5)
+        w = de_norm(self.pred[:, 3, :], -5.0, 5.0)
+        p = de_norm(self.pred[:, 4, :], -1.25, 4.0)
 
         return torch.stack((alpha, u, v, w, p), dim=1)
 
     def get_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
-        alpha = self.pred[:, 0, :]
-        u = de_normalize(self.pred[:, 1, :], -5.0, 5.0)
-        v = de_normalize(self.pred[:, 2, :], -2.0, 4.5)
-        w = de_normalize(self.pred[:, 3, :], -5.0, 5.0)
-        p = de_normalize(self.pred[:, 4, :], -1.25, 4.0)
+        alpha = self.preds[:, 0, :]
+        u = de_norm(self.pred[:, 1, :], -5.0, 5.0)
+        v = de_norm(self.pred[:, 2, :], -2.0, 4.5)
+        w = de_norm(self.pred[:, 3, :], -5.0, 5.0)
+        p = de_norm(self.pred[:, 4, :], -1.25, 4.0)
 
         # retrieve dimensional data for u,v,w,p
         u_dim = u * self.U_ref
@@ -153,7 +159,7 @@ class HGPIFuNet(BasePIFuNet):
         :param labels_p: Optional [B, Res, N] gt pressure field labeling
         :return: [B, Res, N] predictions for each point
         '''
-        # TODO: read fluid properties and impact paramters from a dict .json
+        # TODO: read fluid properties and impact parameters from a dict .json
         # impact parameters
         U_0 = 0.62  # impact velocity
         D_0 = 2.1 / 10 ** 3  # Droplet diameter
@@ -162,7 +168,7 @@ class HGPIFuNet(BasePIFuNet):
         self.U_ref = U_0  # impact velocity
         self.L_ref = rp  # Droplet diameter or image reproduction scale
         self.rho_ref = rho_1  # selected density of water
-        # normalization max,min
+        # min-max normalization boundaries
         self.xmax = 550.0
         self.xmin = -550.0
         self.tmax = 70.0
@@ -174,7 +180,7 @@ class HGPIFuNet(BasePIFuNet):
         if labels_u is not None and labels_v is not None and labels_w is not None:
             labels_u_proj, labels_w_proj = project_velocity_vector_field(labels_u, labels_w, calibs)
 
-            # normalizing the data
+            # normalizing the label data
             labels_u_proj = normalize(labels_u_proj, -5.0, 5.0)
             labels_v = normalize(labels_v, -2.0, 4.5)
             labels_w_proj = normalize(labels_w_proj, -5.0, 5.0)
@@ -205,18 +211,15 @@ class HGPIFuNet(BasePIFuNet):
         z = xyz[:, 2:3, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
 
-        #non-dimensionalize coordinates
-        x_no_dim = x / self.L_ref
-        y_no_dim = y / self.L_ref
-        z_no_dim = z / self.L_ref
+        '''non-dimensionalize coordinates'''
+        x_non_dim = x / self.L_ref
+        y_non_dim = y / self.L_ref
+        z_non_dim = z / self.L_ref
 
         '''Normalize data to [0,1] by min-max-normalization'''
-        self.x_feat = normalize(x_no_dim, self.xmin, self.xmax)
-        self.y_feat = normalize(y_no_dim, self.xmin, self.xmax)
-        self.z_feat = normalize(z_no_dim, self.xmin, self.xmax)
-        #self.x_feat = self.x_feat
-        #self.y_feat = self.y_feat
-        #self.z_feat = self.z_feat
+        self.x_feat = normalize(x_non_dim, self.xmin, self.xmax)
+        self.y_feat = normalize(y_non_dim, self.xmin, self.xmax)
+        self.z_feat = normalize(z_non_dim, self.xmin, self.xmax)
         self.x_feat.requires_grad = True
         self.y_feat.requires_grad = True
         self.z_feat.requires_grad = True
@@ -240,15 +243,12 @@ class HGPIFuNet(BasePIFuNet):
 
             self.pred = self.surface_classifier(image_feature, self.x, self.y, self.z, self.t)
 
-            # Masking of output occupancy field -> always zero outside of shadowgraph contour, applied along depth dimension
+            ''' Masking output occupancy field -> always zero outside of shadowgraph contour, applied along depth dimension '''
             pred_occupancy = in_img[:, None].float() * self.pred[:, :1, :]
-
-            # print('pred size: ', pred_occupancy.size())
-            # pred_occupancy = self.pred[:, :1, :]
-
             self.intermediate_preds_list.append(pred_occupancy)
 
         self.preds = self.intermediate_preds_list[-1]
+        self.pred_dimensional = self.get_dimensional_pred()
         # print('occupancy field mean: ', self.preds.mean().item(), 'max: ', self.preds.max().item(), 'min: ', self.preds.min().item())
 
     def get_im_feat(self):
@@ -344,10 +344,10 @@ class HGPIFuNet(BasePIFuNet):
         p = self.pred[0, 4, :]
 
         # get dimensional quantities
-        u = de_normalize(u, -5.0, 5.0)
-        v = de_normalize(v, -2.0, 4.5)
-        w = de_normalize(w, -5.0, 5.0)
-        p = de_normalize(p, -1.25, 4.0)
+        u = de_norm(u, -5.0, 5.0)
+        v = de_norm(v, -2.0, 4.5)
+        w = de_norm(w, -5.0, 5.0)
+        p = de_norm(p, -1.25, 4.0)
         #print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
         #print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
 
@@ -365,44 +365,44 @@ class HGPIFuNet(BasePIFuNet):
         mu_M = alpha * mu_1 + (1 - alpha) * mu_2
 
         # derivatives
-        alpha_t = nth_derivative(alpha, wrt=self.t, n=1) / (self.tmax - self.tmin)
-        alpha_x = nth_derivative(alpha, wrt=self.x, n=1) / (self.xmax - self.xmin)
-        alpha_y = nth_derivative(alpha, wrt=self.y, n=1) / (self.xmax - self.xmin)
-        alpha_z = nth_derivative(alpha, wrt=self.z, n=1) / (self.xmax - self.xmin)
-        alpha_xx = nth_derivative(alpha_x, wrt=self.x, n=1) / (self.xmax - self.xmin)**2
-        alpha_yy = nth_derivative(alpha_y, wrt=self.y, n=1) / (self.xmax - self.xmin)**2
-        alpha_zz = nth_derivative(alpha_z, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
-        alpha_xy = nth_derivative(alpha_x, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
-        alpha_xz = nth_derivative(alpha_x, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
-        alpha_yz = nth_derivative(alpha_y, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
+        alpha_t = self.diff_t_de_norm(nth_derivative(alpha, wrt=self.t, n=1))
+        alpha_x = self.diff_xyz_de_norm(nth_derivative(alpha, wrt=self.x, n=1))
+        alpha_y = self.diff_xyz_de_norm(nth_derivative(alpha, wrt=self.y, n=1))
+        alpha_z = self.diff_xyz_de_norm(nth_derivative(alpha, wrt=self.z, n=1))
+        alpha_xx = self.diff_xyz_de_norm(nth_derivative(alpha_x, wrt=self.x, n=1))
+        alpha_yy = self.diff_xyz_de_norm(nth_derivative(alpha_y, wrt=self.y, n=1))
+        alpha_zz = self.diff_xyz_de_norm(nth_derivative(alpha_z, wrt=self.z, n=1))
+        alpha_xy = self.diff_xyz_de_norm(nth_derivative(alpha_x, wrt=self.z, n=1))
+        alpha_xz = self.diff_xyz_de_norm(nth_derivative(alpha_x, wrt=self.z, n=1))
+        alpha_yz = self.diff_xyz_de_norm(nth_derivative(alpha_y, wrt=self.z, n=1))
 
-        u_t = nth_derivative(u, wrt=self.t, n=1) / (self.tmax - self.tmin)
-        u_x = nth_derivative(u, wrt=self.x, n=1) / (self.xmax - self.xmin)
-        u_y = nth_derivative(u, wrt=self.y, n=1) / (self.xmax - self.xmin)
-        u_z = nth_derivative(u, wrt=self.z, n=1) / (self.xmax - self.xmin)
-        u_xx = nth_derivative(u_x, wrt=self.x, n=1) / (self.xmax - self.xmin)**2
-        u_yy = nth_derivative(u_y, wrt=self.y, n=1) / (self.xmax - self.xmin)**2
-        u_zz = nth_derivative(u_z, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
+        u_t = self.diff_t_de_norm(nth_derivative(u, wrt=self.t, n=1))
+        u_x = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.x, n=1))
+        u_y = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.y, n=1))
+        u_z = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.z, n=1))
+        u_xx = self.diff_xyz_de_norm(nth_derivative(u_x, wrt=self.x, n=1))
+        u_yy = self.diff_xyz_de_norm(nth_derivative(u_y, wrt=self.y, n=1))
+        u_zz = self.diff_xyz_de_norm(nth_derivative(u_z, wrt=self.z, n=1))
 
-        v_t = nth_derivative(v, wrt=self.t, n=1) / (self.tmax - self.tmin)
-        v_x = nth_derivative(v, wrt=self.x, n=1) / (self.xmax - self.xmin)
-        v_y = nth_derivative(v, wrt=self.y, n=1) / (self.xmax - self.xmin)
-        v_z = nth_derivative(v, wrt=self.z, n=1) / (self.xmax - self.xmin)
-        v_xx = nth_derivative(v_x, wrt=self.x, n=1) / (self.xmax - self.xmin)**2
-        v_yy = nth_derivative(v_y, wrt=self.y, n=1) / (self.xmax - self.xmin)**2
-        v_zz = nth_derivative(v_z, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
+        v_t = self.diff_t_de_norm(nth_derivative(v, wrt=self.t, n=1))
+        v_x = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.x, n=1))
+        v_y = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.y, n=1))
+        v_z = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.z, n=1))
+        v_xx = self.diff_xyz_de_norm(nth_derivative(v_x, wrt=self.x, n=1))
+        v_yy = self.diff_xyz_de_norm(nth_derivative(v_y, wrt=self.y, n=1))
+        v_zz = self.diff_xyz_de_norm(nth_derivative(v_z, wrt=self.z, n=1))
 
-        w_t = nth_derivative(w, wrt=self.t, n=1) / (self.tmax - self.tmin)
-        w_x = nth_derivative(w, wrt=self.x, n=1) / (self.xmax - self.xmin)
-        w_y = nth_derivative(w, wrt=self.y, n=1) / (self.xmax - self.xmin)
-        w_z = nth_derivative(w, wrt=self.z, n=1) / (self.xmax - self.xmin)
-        w_xx = nth_derivative(w_x, wrt=self.x, n=1) / (self.xmax - self.xmin)**2
-        w_yy = nth_derivative(w_y, wrt=self.y, n=1) / (self.xmax - self.xmin)**2
-        w_zz = nth_derivative(w_z, wrt=self.z, n=1) / (self.xmax - self.xmin)**2
+        w_t = self.diff_t_de_norm(nth_derivative(w, wrt=self.t, n=1))
+        w_x = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.x, n=1))
+        w_y = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.y, n=1))
+        w_z = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.z, n=1))
+        w_xx = self.diff_xyz_de_norm(nth_derivative(w_x, wrt=self.x, n=1))
+        w_yy = self.diff_xyz_de_norm(nth_derivative(w_y, wrt=self.y, n=1))
+        w_zz = self.diff_xyz_de_norm(nth_derivative(w_z, wrt=self.z, n=1))
 
-        p_x = nth_derivative(p, wrt=self.x, n=1) / (self.xmax - self.xmin)
-        p_y = nth_derivative(p, wrt=self.y, n=1) / (self.xmax - self.xmin)
-        p_z = nth_derivative(p, wrt=self.z, n=1) / (self.xmax - self.xmin)
+        p_x = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.x, n=1))
+        p_y = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.y, n=1))
+        p_z = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.z, n=1))
 
         # derivatives of viscosity mixture required for viscous term in NSE
         mu_x = (mu_1 - mu_2) * alpha_x
@@ -500,7 +500,7 @@ class HGPIFuNet(BasePIFuNet):
         error_data_vel = self.get_velocity_loss()
         error_data_pres = self.get_pressure_loss()
 
-        # get pde errors
+        # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
             error_conti, error_phase_conv, error_nse = self.get_pde_loss(points=points)
         else:

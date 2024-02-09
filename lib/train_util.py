@@ -3,7 +3,7 @@ import numpy as np
 from .mesh_util import *
 from .sample_util import *
 from .geometry import *
-from lib.plotting import *
+from .plotting import *
 import cv2
 from PIL import Image
 from tqdm import tqdm
@@ -63,8 +63,14 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True):
     save_img = np.concatenate(save_img_list, axis=1)
     Image.fromarray(np.uint8(save_img[:,:,::-1])).save(save_img_path)
 
-    verts, faces, _, _ = reconstruction(
+    verts, faces, coords, u, v, w, p, _, _ = reconstruction(
         net, cuda, calib_tensor, opt.resolution, b_min, b_max, use_octree=use_octree, time_step=time_tensor)
+
+    gen_vtk_prediction(coords, u, 'u', save_path[:-4])
+    gen_vtk_prediction(coords, v, 'v', save_path[:-4])
+    gen_vtk_prediction(coords, w, 'w', save_path[:-4])
+    gen_vtk_prediction(coords, p, 'p', save_path[:-4])
+
     verts_tensor = torch.from_numpy(verts.T).unsqueeze(0).to(device=cuda).float()
     xyz_tensor = net.projection(verts_tensor, calib_tensor[:1])
     uv = xyz_tensor[:, :2, :]
@@ -148,7 +154,7 @@ def compute_acc(pred, gt, thresh=0.5):
         return true_pos / union, true_pos / vol_pred, true_pos / vol_gt
 
 
-def calc_error(opt, net, cuda, dataset, num_tests, ds='test'):
+def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False):
     if num_tests > len(dataset):
         num_tests = len(dataset)
     with torch.no_grad():
@@ -174,17 +180,30 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test'):
 
             IOU, prec, recall = compute_acc(res, label_tensor)
 
-            # plot error in alpha field
-            plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'z','alpha', 'alpha', name, ds)
+            if plot_results:
 
-            #plot velocity errors
-            labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w, calib_tensor)
-            plot_contour(opt, sample_tensor, res_PINN[0, 1, :], labels_u_proj[0, :], 'z', 'u', 'vel', name, ds)
-            plot_contour(opt, sample_tensor, res_PINN[0, 2, :], label_tensor_v[0, :], 'z', 'v', 'vel', name, ds)
-            plot_contour(opt, sample_tensor, res_PINN[0, 3, :], labels_w_proj[0, :], 'z', 'w', 'vel', name, ds)
+                # plot error in alpha field
+                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'z','alpha', 'alpha', name, ds)
 
-            #plot error in pressure field
-            plot_contour(opt, sample_tensor, res_PINN[0, 4, :], label_tensor_p[0, :], 'z', 'p', 'pres', name, ds)
+                #plot velocity errors
+                labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w, calib_tensor)
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], 'z', 'u',
+                                     'vel', name, ds)
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], 'z', 'v',
+                                     'vel', name, ds)
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 3, :], res[0, 0, :], labels_w_proj[0, :], 'z', 'w',
+                                     'vel', name, ds)
+
+                #plot error in pressure field
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor_p[0, :], 'z', 'p',
+                                     'pres', name, ds)
+
+                # plot 3D-contours
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'alpha', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], labels_u_proj[0, :], 'u', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], label_tensor_v[0, :], 'v', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], labels_w_proj[0, :], 'w', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], label_tensor_p[0, :], 'p', name, ds)
 
             print('{0}/{1}: {6} | Error: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f}'.format(idx, num_tests, error.item(), IOU.item(), prec.item(), recall.item(), name))
             error_arr.append(error.item())

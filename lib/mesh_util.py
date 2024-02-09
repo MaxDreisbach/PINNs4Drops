@@ -4,7 +4,7 @@ import torch
 import time
 from .sdf import create_grid, eval_grid_octree, eval_grid
 from skimage import measure
-from lib.plotting import *
+from .plotting import *
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -62,11 +62,6 @@ def reconstruction(net, cuda, calib_tensor,
     net_end_time = time.time()
     print('network time: {0}\n'.format(net_end_time - net_start_time))
 
-    ''' Plotting results for Debug'''
-    print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
-    print('v field mean: ', v.mean().item(), 'max: ', v.max().item(), 'min: ', v.min().item())
-    print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
-
     # Plotting for debug
     if PLOTTING:
         plot_contour_grid(sdf, sdf, 'z', 64, 'alpha')
@@ -88,7 +83,7 @@ def reconstruction(net, cuda, calib_tensor,
         with open(time_log, 'a') as outfile:
             outfile.write('{0},\n'.format(mc_end_time - mc_start_time))
 
-        return verts, faces, normals, values
+        return verts, faces, coords, u, v, w, p, normals, values
     except:
         print('error cannot marching cubes')
         return -1
