@@ -159,7 +159,7 @@ class HGPIFuNet(BasePIFuNet):
         :param labels_p: Optional [B, Res, N] gt pressure field labeling
         :return: [B, Res, N] predictions for each point
         '''
-        # TODO: read fluid properties and impact parameters from a dict .json
+        # TODO: read fluid properties and impact parameters from a .json dict
         # impact parameters
         U_0 = 0.62  # impact velocity
         D_0 = 2.1 / 10 ** 3  # Droplet diameter
