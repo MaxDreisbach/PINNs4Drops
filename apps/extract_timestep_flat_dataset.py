@@ -11,7 +11,7 @@ from os import walk
 in_path = "/net/istmtrinculo/volume2/data2/hi208/fh2_work/foam/vu3498-3.2/run/AllesGleichWieStrukturiert/"
 GEO_path = "/net/istmhome/users/hi227/Projects/PIFu-master/train_data_DFS2023C/GEO/OBJ/"
 ### Ouput dirs
-time_step_path = "/net/istmhome/users/hi227/Projects/PIFu-master/train_data_DFS2023C/TIME/"
+time_step_path = "/net/istmhome/users/hi227/Projects/PINN-PIFu/train_data_DFS2024D/TIME/"
 
 # Load in the time step paths
 dirnames = []
@@ -21,6 +21,8 @@ for (dirpath, dirname, file_name) in walk(in_path):
     
 dirnames.sort()
 timestamps = [x for x in dirnames if x[0].isdigit()]
+#skip timestep 0
+timestamps = timestamps[1:]
 print(len(timestamps))
 
 # get corresponding sample names from OBJ folder

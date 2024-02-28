@@ -8,8 +8,6 @@ from .plotting import *
 import matplotlib
 import matplotlib.pyplot as plt
 
-PLOTTING = False
-
 
 def reconstruction(net, cuda, calib_tensor,
                    resolution, b_min, b_max,
@@ -62,14 +60,6 @@ def reconstruction(net, cuda, calib_tensor,
     net_end_time = time.time()
     print('network time: {0}\n'.format(net_end_time - net_start_time))
 
-    # Plotting for debug
-    if PLOTTING:
-        plot_contour_grid(sdf, sdf, 'z', 64, 'alpha')
-        plot_contour_grid(u, u, 'z', 64, 'vel')
-        plot_contour_grid(v, v, 'z', 64, 'vel')
-        plot_contour_grid(w, w, 'z', 64, 'vel')
-        plot_contour_grid(p, p, 'z', 64, 'pres')
-
     # Finally we do marching cubes
     mc_start_time = time.time()
     try:
@@ -83,7 +73,7 @@ def reconstruction(net, cuda, calib_tensor,
         with open(time_log, 'a') as outfile:
             outfile.write('{0},\n'.format(mc_end_time - mc_start_time))
 
-        return verts, faces, coords, u, v, w, p, normals, values
+        return verts, faces, coords, sdf, u, v, w, p, normals, values
     except:
         print('error cannot marching cubes')
         return -1

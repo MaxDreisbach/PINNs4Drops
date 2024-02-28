@@ -45,7 +45,7 @@ def reshape_sample_tensor(sample_tensor, num_views):
     return sample_tensor
 
 
-def gen_mesh(opt, net, cuda, data, save_path, use_octree=True):
+def gen_mesh(opt, net, cuda, data, save_path, use_octree=True, gen_vel_pres=False):
     image_tensor = data['img'].to(device=cuda)
     calib_tensor = data['calib'].to(device=cuda)
     time_tensor = data['time_step'].to(device=cuda)
@@ -63,13 +63,26 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True):
     save_img = np.concatenate(save_img_list, axis=1)
     Image.fromarray(np.uint8(save_img[:,:,::-1])).save(save_img_path)
 
-    verts, faces, coords, u, v, w, p, _, _ = reconstruction(
+    verts, faces, coords, sdf, u, v, w, p, _, _ = reconstruction(
         net, cuda, calib_tensor, opt.resolution, b_min, b_max, use_octree=use_octree, time_step=time_tensor)
 
-    gen_vtk_prediction(coords, u, 'u', save_path[:-4])
-    gen_vtk_prediction(coords, v, 'v', save_path[:-4])
-    gen_vtk_prediction(coords, w, 'w', save_path[:-4])
-    gen_vtk_prediction(coords, p, 'p', save_path[:-4])
+    if gen_vel_pres:
+        #plot_contour_eval(coords, opt, u, 'x', 'u', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, v, 'x', 'v', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, w, 'x', 'w', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, p, 'x', 'p', 'pres', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, u, 'y', 'u', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, v, 'y', 'v', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, w, 'y', 'w', 'vel', save_path[:-4], 'test')
+        #plot_contour_eval(coords, opt, p, 'y', 'p', 'pres', save_path[:-4], 'test')
+        plot_contour_eval(coords, opt, u, sdf, 'z', 'u', 'vel', save_path[:-4], 'test')
+        plot_contour_eval(coords, opt, v, sdf, 'z', 'v', 'vel', save_path[:-4], 'test')
+        plot_contour_eval(coords, opt, w, sdf, 'z', 'w', 'vel', save_path[:-4], 'test')
+        plot_contour_eval(coords, opt, p, sdf, 'z', 'p', 'pres', save_path[:-4], 'test')
+        #gen_vtk_prediction(coords, u, 'u', save_path[:-4])
+        #gen_vtk_prediction(coords, v, 'v', save_path[:-4])
+        #gen_vtk_prediction(coords, w, 'w', save_path[:-4])
+        #gen_vtk_prediction(coords, p, 'p', save_path[:-4])
 
     verts_tensor = torch.from_numpy(verts.T).unsqueeze(0).to(device=cuda).float()
     xyz_tensor = net.projection(verts_tensor, calib_tensor[:1])
@@ -199,11 +212,11 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False
                                      'pres', name, ds)
 
                 # plot 3D-contours
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'alpha', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], labels_u_proj[0, :], 'u', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], label_tensor_v[0, :], 'v', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], labels_w_proj[0, :], 'w', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], label_tensor_p[0, :], 'p', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], 'alpha', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], 'u', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], 'v', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
 
             print('{0}/{1}: {6} | Error: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f}'.format(idx, num_tests, error.item(), IOU.item(), prec.item(), recall.item(), name))
             error_arr.append(error.item())

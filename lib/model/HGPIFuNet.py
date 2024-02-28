@@ -163,7 +163,7 @@ class HGPIFuNet(BasePIFuNet):
         # impact parameters
         U_0 = 0.62  # impact velocity
         D_0 = 2.1 / 10 ** 3  # Droplet diameter
-        rp = 256 / 93.809 / 10 ** 3  # synthetic image reproduction scale
+        rp = 256 / 93.809 / 10 ** 3  # synthetic image reproduction scale [image domain - PINN domain]
         rho_1 = 998.2  # density of inside medium (water)
         self.U_ref = U_0  # impact velocity
         self.L_ref = rp  # Droplet diameter or image reproduction scale
@@ -440,7 +440,7 @@ class HGPIFuNet(BasePIFuNet):
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
         residual_mask = torch.zeros_like(curvature)
-        for i in range(self.opt.num_sample_inout):
+        for i in range(self.opt.n_vel_pres_data):
             # print(points[:, 1, i])
             if points[:, 1, i] >= y_ground:
                 residual_mask[:, :, i] = 1
@@ -450,7 +450,7 @@ class HGPIFuNet(BasePIFuNet):
         # zero_residual_points = (residual_mask == 0).sum()
         # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
 
-        '''two phase flow single-field navier stokes equations in the phase intensive-form are considered here (see 
+        '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 
         to zero, as they yield in a term that is equal to the interface advection equation (similarly terms drop out 
         due to continuity) '''

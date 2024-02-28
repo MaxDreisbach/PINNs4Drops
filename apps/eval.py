@@ -96,7 +96,7 @@ class Evaluator:
             'time_step': time_step
         }
 
-    def eval(self, data, use_octree=False):
+    def eval(self, data, use_octree=False, gen_vel_pres=False):
         '''
         Evaluate a data point
         :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
@@ -111,7 +111,7 @@ class Evaluator:
             if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
-                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree)
+                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree, gen_vel_pres=gen_vel_pres)
 
 
 if __name__ == '__main__':
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         try:
             print(image_path, mask_path, time_path)
             data = evaluator.load_image(image_path, mask_path, time_path)
-            evaluator.eval(data, True)
+            evaluator.eval(data, True, True)
         except Exception as e:
             print("error:", e.args)
 

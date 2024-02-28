@@ -16,7 +16,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 #from pyexr import write
 
-DEBUG = True
+DEBUG = False
 
 def make_rotate(rx, ry, rz):
     sinX = np.sin(rx)
@@ -277,7 +277,7 @@ def render_prt_ortho(out_path, folder_name, subject_name, shs, rndr, rndr_uv, im
                 ''' DEBUG: Plot masked image'''
                 if DEBUG:
                     #synthetic_image_path = os.path.join('../PIFu-master/train_data_DFS2024D/RENDER',subject_name, '%d_%d_%02d.png'%(y,p,j))
-                    synthetic_image_path = os.path.join('./train_data_DFS2024D/RENDER', subject_name, '%d_%d_%02d.png' % (y, p, j))
+                    synthetic_image_path = os.path.join('../PIFu-master/train_data_DFS2023C/RENDER', subject_name, '%d_%d_%02d.png' % (y, p, j))
                     synth_im = cv2.imread(synthetic_image_path)
                     #synth_im = cv2.cvtColor(synth_im, cv2.COLOR_BGR2RGB)
 
@@ -325,7 +325,7 @@ if __name__ == '__main__':
     shs = np.load('./env_sh.npy')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, default='../PIFu-master/render/Fink2018_structured_2023')
+    parser.add_argument('-i', '--input', type=str, default='../PIFu-master/render/Fink2018_symm')
     parser.add_argument('-o', '--out_dir', type=str, default='./train_data_DFS2024D')
     parser.add_argument('-m', '--ms_rate', type=int, default=1, help='higher ms rate results in less aliased output. MESA renderer only supports ms_rate=1.')
     parser.add_argument('-e', '--egl',  action='store_true', help='egl rendering option. use this when rendering with headless server with NVIDIA GPU')
@@ -347,7 +347,7 @@ if __name__ == '__main__':
         break
 
     subfolders.sort()
-    subfolders = subfolders[930:]
+    subfolders = subfolders[411:]
     print(subfolders)
 
     for idx,folder in enumerate(subfolders):

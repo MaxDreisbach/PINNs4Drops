@@ -1,11 +1,3 @@
-#!/usr/bin/env pyt.stl3.stl')
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jul 26 17:54:38 2023
-
-@author: Samet
-"""
-
 import pyvista
 from pyvista import examples
 import numpy as np
