@@ -78,6 +78,7 @@ class BaseOptions():
         g_model.add_argument('--hourglass_dim', type=int, default='256', help='256 | 512')
 
         # Classification General
+        g_model.add_argument('--use_cond_MLP', default=False, type=bool, help='switch MLP architecture to conditioned latent space')
         g_model.add_argument('--mlp_dim', nargs='+', default=[260, 1024, 512, 256, 128, 5], type=int,
                              help='# of dimensions of mlp')
         g_model.add_argument('--mlp_dim_color', nargs='+', default=[513, 1024, 512, 256, 128, 3],
@@ -86,11 +87,15 @@ class BaseOptions():
                              help='using tanh after last conv of image_filter network')
 
         ''' NEW: Added loss weights for PINN'''
-        g_model.add_argument('--w_vel', default=1, type=float, help='weight of velocity data loss')
-        g_model.add_argument('--w_pres', default=1, type=float, help='weight of pressure data loss')
-        g_model.add_argument('--w_conti', default=1, type=float, help='weight of continuity pde loss')
-        g_model.add_argument('--w_phase', default=1, type=float, help='weight of phase advection pde loss')
-        g_model.add_argument('--w_nse', default=1, type=float, help='weight of nse pde loss')
+        g_model.add_argument('--weight_u', default=100, type=float, help='weight of u velocity data loss')
+        g_model.add_argument('--weight_v', default=100, type=float, help='weight of v velocity data loss')
+        g_model.add_argument('--weight_w', default=100, type=float, help='weight of w velocity data loss')
+        g_model.add_argument('--weight_p', default=100, type=float, help='weight of pressure data loss')
+        g_model.add_argument('--weight_conti', default=10000 , type=float, help='weight of continuity pde loss')
+        g_model.add_argument('--weight_phase', default=10000, type=float, help='weight of phase advection pde loss')
+        g_model.add_argument('--weight_mom_x', default=10000, type=float, help='weight of x momentum pde loss')
+        g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')
+        g_model.add_argument('--weight_mom_z', default=10000, type=float, help='weight of z momentum pde loss')
 
         parser.add_argument('--n_vel_pres_data', default=5000, type=int, help='number of sample points for velocity '
                                                                              'and pressure data loss (alpha field has'

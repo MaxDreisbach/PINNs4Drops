@@ -181,8 +181,8 @@ def extractFromSimulation(file):
     # consider mirroring for velocity fields in x and y coordinate (w is defined for the entire domain already)
     u_mapped = map_field_u(coord, u)
     v_mapped = map_field_v(coord, v)
-    # w_mapped = map_field_scalar(coord, w)
-    # p_mapped = map_field_scalar(coord, P)
+    w_mapped = map_field_scalar(coord, w)
+    p_mapped = map_field_scalar(coord, P)
     # c_mapped = map_field_scalar(coord, c)
 
     # %% creating new pyvista mesh with the new data
@@ -193,28 +193,28 @@ def extractFromSimulation(file):
     z_resampled = resample_field(X, Y, Z, Z, n_x=re_x, n_y=re_y, n_z=re_z)
     u_resampled = resample_field(X, Y, Z, u_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     v_resampled = resample_field(X, Y, Z, v_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
-    # w_resampled = resample_field(X, Y, Z, w_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
-    # p_resampled = resample_field(X, Y, Z, p_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
+    w_resampled = resample_field(X, Y, Z, w_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
+    p_resampled = resample_field(X, Y, Z, p_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     # c_resampled = resample_field(X, Y, Z, c_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
-    w_resampled = 0
-    p_resampled = 0
+    # w_resampled = 0
+    # p_resampled = 0
     c_resampled = 0
+
+    # plot_iso_surface(x_resampled, y_resampled, z_resampled, c_resampled)
+    plot_iso_surface(x_resampled, y_resampled, z_resampled, u_resampled)
+    plot_iso_surface(x_resampled, y_resampled, z_resampled, v_resampled)
+    plot_iso_surface(x_resampled, y_resampled, z_resampled, w_resampled)
+    # plot_iso_surface(x_resampled, y_resampled, z_resampled, p_resampled)
+    # plot_velocity_field(x_resampled, y_resampled, z_resampled, u_resampled, v_resampled, w_resampled)
 
     # rotate to match PIFu coordinate system (x,y,z) -> (x,z,y)
     u_resampled = u_resampled.transpose((1, 2, 0))
     v_resampled = v_resampled.transpose((1, 2, 0))
-    # w_resampled = w_resampled.transpose((1, 2, 0))
-    # p_resampled = p_resampled.transpose((1, 2, 0))
+    w_resampled = w_resampled.transpose((1, 2, 0))
+    p_resampled = p_resampled.transpose((1, 2, 0))
     # c_resampled = c_resampled.transpose((1, 2, 0))
 
     print('Dimensions after transpose: ', np.shape(u_resampled))
-
-    # plot_iso_surface(x_resampled, y_resampled, z_resampled, c_resampled)
-    # plot_iso_surface(x_resampled, y_resampled, z_resampled, u_resampled)
-    # plot_iso_surface(x_resampled, y_resampled, z_resampled, v_resampled)
-    # plot_iso_surface(x_resampled, y_resampled, z_resampled, w_resampled)
-    # plot_iso_surface(x_resampled, y_resampled, z_resampled, p_resampled)
-    # plot_velocity_field(x_resampled, y_resampled, z_resampled, u_resampled, v_resampled, w_resampled)
 
     return x_resampled, y_resampled, z_resampled, u_resampled, v_resampled, w_resampled, p_resampled, c_resampled
 
@@ -248,6 +248,7 @@ for i, file in enumerate(dirnames):
 
     iter_start_time = time.time()
     x, y, z, u, v, w, p, c = extractFromSimulation(file)
+    exit()
 
     # saving data
     savedirvel = os.path.join(out_dir, 'VEL', str(i).zfill(4))
@@ -261,8 +262,8 @@ for i, file in enumerate(dirnames):
     # np.save(os.path.join(savedirvel, "x_train.npy"), x)
     # np.save(os.path.join(savedirvel, "y_train.npy"), y)
     # np.save(os.path.join(savedirvel, "z_train.npy"), z)
-    np.save(os.path.join(savedirvel, "u_train.npy"), u)
-    np.save(os.path.join(savedirvel, "v_train.npy"), v)
+    # np.save(os.path.join(savedirvel, "u_train.npy"), u)
+    # np.save(os.path.join(savedirvel, "v_train.npy"), v)
     # np.save(os.path.join(savedirvel, "w_train.npy"), w)
     # np.save(os.path.join(savedirpres, "p_train.npy"), p)
 

@@ -8,11 +8,11 @@ import time
 
 ### Input dirs
 # synthetic renders from blender
-in_path = "../train_data_DSH2024/GEO/OBJ/"
-render_path = "../../Blender_droplet_shear_flow/denoised/"
+in_path = "../../PIFu-master/train_data_DFS2023C/GEO/OBJ/"
+render_path = "../../Blender_96_3/denoised/"
 
 ### Ouput dirs
-train_path = "../train_data_DSH2024/RENDER/"
+train_path = "../train_data_DFS2024A/RENDER/"
 
 ### Starting mesh
 START = 0
@@ -79,7 +79,7 @@ for (dirpath, dirnames, fname) in walk(in_path):
 
 filenames.sort()
 filenames = filenames[START:]
-#print(filenames)
+print(filenames)
 print('Copying RGB-renderings for ', len(filenames)+START, ' object files',)
 
 for count,filename in enumerate(filenames):

@@ -65,11 +65,11 @@ def project_velocity_vector_field(labels_u, labels_w, calibrations):
     :return: proj_labels_u,
     proj_labels_w: [BxN] Tensor of projected velocity labels
     '''
-    rot = calibrations[:, :3, :3]
-    rot = rot / rot[:, 1, 1] # [B, 3, 3]
+    rot = calibrations[:, :3, :3] # [B, 3, 3]
+    rot = rot / rot[:, 1, 1]
     labels_v = torch.zeros_like(labels_u)
     labels = torch.stack((labels_u, labels_v, labels_w), dim=1) # [B, 3, N]
-    #print(rot)
+    #print('rotation matrix: ', rot)
     #print(labels)
     #print('shape of rotation tensor: ', rot.size())
     #print('shape of u-comp labels tensor: ', labels_u.size())
@@ -87,3 +87,4 @@ def project_velocity_vector_field(labels_u, labels_w, calibrations):
     #exit()
 
     return proj_labels_u, proj_labels_w
+

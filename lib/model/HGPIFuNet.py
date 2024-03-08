@@ -2,22 +2,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import json
+import os
 
 from torch.autograd import grad
 
 from .BasePIFuNet import BasePIFuNet
 from .SurfaceClassifier import SurfaceClassifier
+from .ConditionedSurfaceClassifier import ConditionedSurfaceClassifier
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
 from ..geometry import project_velocity_vector_field
+from ..plotting import plot_data_sample
+from ..plotting import plot_im_feat
 
 
 def normalize(data, min, max):
+    '''min-max normalization'''
     return (data - min) / (max - min)
 
 
 def de_norm(data, min, max):
+    '''min-max normalization'''
     return data * (max - min) + min
 
 
@@ -66,20 +73,25 @@ class HGPIFuNet(BasePIFuNet):
             error_term=error_term)
 
         self.name = 'hgpifu-PINN'
-
         self.opt = opt
+        self.root = self.opt.dataroot
+        print(self.root)
+
         # for PINN (u,v,w,p) data loss term
         self.n_vel_pres_data = self.opt.n_vel_pres_data
-
         self.num_views = self.opt.num_views
-
         self.image_filter = HGFilter(opt)
 
-        self.surface_classifier = SurfaceClassifier(
-            filter_channels=self.opt.mlp_dim,
-            num_views=self.opt.num_views,
-            no_residual=self.opt.no_residual,
-            last_op=nn.Sigmoid())
+        if not opt.use_cond_MLP:
+            print('Using standard MLP architecture from PIFuNet')
+            self.surface_classifier = SurfaceClassifier(
+                filter_channels=self.opt.mlp_dim,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid())
+        else:
+            print('Using conditioned MLP instead of original MLP architecture from PIFuNet')
+            self.surface_classifier = ConditionedSurfaceClassifier()
 
         self.normalizer = DepthNormalizer(opt)
 
@@ -96,6 +108,37 @@ class HGPIFuNet(BasePIFuNet):
         self.intermediate_preds_list = []
         self.intermediate_u = []
 
+        # Read fluid properties
+        with open(os.path.join(self.root, "flow_case.json"), "r") as f:
+            flow_case = json.load(f)
+
+        self.U_ref = flow_case["U_0"]  # impact velocity
+        self.L_ref = flow_case["rp"]  # image reproduction scale -> domain size in image space
+        self.rho_ref = flow_case["rho_1"]  # selected density of water
+        self.sigma = flow_case["sigma"]  # surface tension
+        self.rho_1 = flow_case["rho_1"]  # density of inside medium
+        self.rho_2 = flow_case["rho_2"]  # density of outside medium
+        self.mu_1 = flow_case["mu_1"]  # viscosity of inside medium
+        self.mu_2 = flow_case["mu_2"]  # viscosity of outside medium
+        self.g = flow_case["g"]  # gravity
+        self.y_ground = flow_case["y_ground"]  # 60um from y0+eps#-10.75 + eps# in (256,256,256) image space
+
+        # min-max normalization boundaries
+        self.xmin = flow_case["x_norm_min"]
+        self.xmax = flow_case["x_norm_max"]
+        self.tmin = flow_case["t_norm_min"]
+        self.tmax = flow_case["t_norm_max"]
+        self.umin = flow_case["u_norm_min"]
+        self.umax = flow_case["u_norm_max"]
+        self.vmin = flow_case["v_norm_min"]
+        self.vmax = flow_case["v_norm_max"]
+        self.wmin = flow_case["w_norm_min"]
+        self.wmax = flow_case["w_norm_max"]
+        self.pmin = flow_case["p_norm_min"]
+        self.pmax = flow_case["p_norm_max"]
+
+        self.lr = 0.4 # learning rate for RBA Lagrange multipliers
+
         init_net(self)
 
     def diff_xyz_de_norm(self, data):
@@ -107,20 +150,20 @@ class HGPIFuNet(BasePIFuNet):
     def get_non_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
         alpha = self.preds[:, 0, :]
-        u = de_norm(self.pred[:, 1, :], -5.0, 5.0)
-        v = de_norm(self.pred[:, 2, :], -2.0, 4.5)
-        w = de_norm(self.pred[:, 3, :], -5.0, 5.0)
-        p = de_norm(self.pred[:, 4, :], -1.25, 4.0)
+        u = de_norm(self.pred[:, 1, :], self.umin, self.umax)
+        v = de_norm(self.pred[:, 2, :], self.vmin, self.vmax)
+        w = de_norm(self.pred[:, 3, :], self.wmin, self.wmax)
+        p = de_norm(self.pred[:, 4, :], self.pmin, self.pmax)
 
         return torch.stack((alpha, u, v, w, p), dim=1)
 
     def get_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
         alpha = self.preds[:, 0, :]
-        u = de_norm(self.pred[:, 1, :], -5.0, 5.0)
-        v = de_norm(self.pred[:, 2, :], -2.0, 4.5)
-        w = de_norm(self.pred[:, 3, :], -5.0, 5.0)
-        p = de_norm(self.pred[:, 4, :], -1.25, 4.0)
+        u = de_norm(self.pred[:, 1, :], self.umin, self.umax)
+        v = de_norm(self.pred[:, 2, :], self.vmin, self.vmax)
+        w = de_norm(self.pred[:, 3, :], self.wmin, self.wmax)
+        p = de_norm(self.pred[:, 4, :], self.pmin, self.pmax)
 
         # retrieve dimensional data for u,v,w,p
         u_dim = u * self.U_ref
@@ -159,20 +202,6 @@ class HGPIFuNet(BasePIFuNet):
         :param labels_p: Optional [B, Res, N] gt pressure field labeling
         :return: [B, Res, N] predictions for each point
         '''
-        # TODO: read fluid properties and impact parameters from a .json dict
-        # impact parameters
-        U_0 = 0.62  # impact velocity
-        D_0 = 2.1 / 10 ** 3  # Droplet diameter
-        rp = 256 / 93.809 / 10 ** 3  # synthetic image reproduction scale [image domain - PINN domain]
-        rho_1 = 998.2  # density of inside medium (water)
-        self.U_ref = U_0  # impact velocity
-        self.L_ref = rp  # Droplet diameter or image reproduction scale
-        self.rho_ref = rho_1  # selected density of water
-        # min-max normalization boundaries
-        self.xmax = 550.0
-        self.xmin = -550.0
-        self.tmax = 70.0
-        self.tmin = 0
 
         if labels is not None:
             self.labels = labels
@@ -181,9 +210,9 @@ class HGPIFuNet(BasePIFuNet):
             labels_u_proj, labels_w_proj = project_velocity_vector_field(labels_u, labels_w, calibs)
 
             # normalizing the label data
-            labels_u_proj = normalize(labels_u_proj, -5.0, 5.0)
-            labels_v = normalize(labels_v, -2.0, 4.5)
-            labels_w_proj = normalize(labels_w_proj, -5.0, 5.0)
+            labels_u_proj = normalize(labels_u_proj, self.umin, self.umax)
+            labels_v = normalize(labels_v, self.vmin, self.vmax)
+            labels_w_proj = normalize(labels_w_proj, self.wmin, self.wmax)
             # print('u field mean: ', labels_u.mean().item(), 'max: ', labels_u.max().item(), 'min: ', labels_u.min().item())
             # print('p field mean: ', labels_p.mean().item(), 'max: ', labels_p.max().item(), 'min: ', labels_p.min().item())
 
@@ -192,7 +221,7 @@ class HGPIFuNet(BasePIFuNet):
             self.labels_w = labels_w_proj
 
         if labels_p is not None:
-            labels_p = normalize(labels_p, -1.25, 4.0)
+            labels_p = normalize(labels_p, self.pmin, self.pmax)
             self.labels_p = labels_p
 
         ''' time step label input added'''
@@ -206,10 +235,19 @@ class HGPIFuNet(BasePIFuNet):
 
         xyz = self.projection(points, calibs, transforms)
         xy = xyz[:, :2, :]
-        x = xyz[:, :1, :]
-        y = xyz[:, 1:2, :]
-        z = xyz[:, 2:3, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
+
+        ''' Axis are flipped by the projection in PIFu to match image coordinates. 
+        ->  Axis need to flipped back for only the PINN input to be consistent with KOS in physics loss'''
+        x = -xyz[:, :1, :]
+        y = -xyz[:, 1:2, :]
+        z = -xyz[:, 2:3, :]
+
+        # Plot label data for debug
+        #plot_data_sample(x, y, z, self.labels, 0.0, 1.0)
+        #plot_data_sample(x, y, z, self.labels_u, 0.0, 1.0)
+        #plot_data_sample(x, y, z, self.labels_v, 0.0, 1.0)
+        #plot_data_sample(x, y, z, self.labels_w, 0.0, 1.0)
 
         '''non-dimensionalize coordinates'''
         x_non_dim = x / self.L_ref
@@ -224,26 +262,24 @@ class HGPIFuNet(BasePIFuNet):
         self.y_feat.requires_grad = True
         self.z_feat.requires_grad = True
 
-
         if self.opt.skip_hourglass:
             tmpx_local_feature = self.index(self.tmpx, xy)
 
         self.intermediate_preds_list = []
 
         for im_feat in self.im_feat_list:
+            #plot_im_feat(im_feat)
             image_feature = self.index(im_feat, xy)
-
             self.x = self.x_feat
             self.y = self.y_feat
             self.z = self.z_feat
-
             # print('image feature size: ', image_feature.size())
             # print('x size: ', self.x.size())
             # print('t size: ', self.t.size())
 
             self.pred = self.surface_classifier(image_feature, self.x, self.y, self.z, self.t)
 
-            ''' Masking output occupancy field -> always zero outside of shadowgraph contour, applied along depth dimension '''
+            ''' Masking output sampled points outside of image domain '''
             pred_occupancy = in_img[:, None].float() * self.pred[:, :1, :]
             self.intermediate_preds_list.append(pred_occupancy)
 
@@ -257,6 +293,17 @@ class HGPIFuNet(BasePIFuNet):
         :return: [B, C_feat, H, W] image feature after filtering
         '''
         return self.im_feat_list[-1]
+
+    def get_RBA_residual(self,  residuals):
+        res_max = torch.max(torch.squeeze(torch.abs(residuals)))
+        lambda_k = 0.8 + self.lr * torch.abs(residuals) / res_max.item()
+        # print('Residuals maximum: ', res_max.item())
+        #print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
+        #print('Lagrange multipliers: ', lambda_k)
+        #print('Lagrange multipliers shape: ', lambda_k.size())
+
+        return lambda_k * residuals, lambda_k
+
 
     def get_error(self):
         '''
@@ -284,7 +331,7 @@ class HGPIFuNet(BasePIFuNet):
         error_v = self.error_term(pred_v, self.labels_v)
         error_w = self.error_term(pred_w, self.labels_w)
 
-        return error_u + error_v + error_w
+        return error_u, error_v, error_w
 
     def get_pressure_loss(self):
         '''
@@ -297,6 +344,7 @@ class HGPIFuNet(BasePIFuNet):
         error_p = self.error_term(pred_p, self.labels_p)
 
         return error_p
+
 
     def detect_faulty_derivative(self, grad, name):
         error_log = 'error_log.txt'
@@ -344,25 +392,12 @@ class HGPIFuNet(BasePIFuNet):
         p = self.pred[0, 4, :]
 
         # get dimensional quantities
-        u = de_norm(u, -5.0, 5.0)
-        v = de_norm(v, -2.0, 4.5)
-        w = de_norm(w, -5.0, 5.0)
-        p = de_norm(p, -1.25, 4.0)
+        u = de_norm(u, self.umin, self.umax)
+        v = de_norm(v, self.vmin, self.vmax)
+        w = de_norm(w, self.wmin, self.wmax)
+        p = de_norm(p, self.pmin, self.pmax)
         #print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
         #print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
-
-        # fluid parameters
-        sigma = 0.071  # surface tension
-        rho_1 = 998.2  # density of inside medium (water)
-        rho_2 = 1.204  # density of outside medium (air)
-        mu_1 = 1.0016 / 10 ** 3  # density of inside medium (water)
-        mu_2 = 1.825 / 10 ** 5  # density of outside medium (air)
-        g = 9.81  # gravity
-        eps = 0.1  # offset from ground to catch solid-liquid interface
-        y_ground = 1e-5 * 6 * 50000 - 2.75  # 60um from y0+eps#-10.75 + eps# in (256,256,256) image space
-        # mixture density, viscosity
-        rho_M = alpha * rho_1 + (1 - alpha) * rho_2
-        mu_M = alpha * mu_1 + (1 - alpha) * mu_2
 
         # derivatives
         alpha_t = self.diff_t_de_norm(nth_derivative(alpha, wrt=self.t, n=1))
@@ -404,26 +439,22 @@ class HGPIFuNet(BasePIFuNet):
         p_y = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.y, n=1))
         p_z = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.z, n=1))
 
-        # derivatives of viscosity mixture required for viscous term in NSE
-        mu_x = (mu_1 - mu_2) * alpha_x
-        mu_y = (mu_1 - mu_2) * alpha_y
-        mu_z = (mu_1 - mu_2) * alpha_z
+        # mixture density, viscosity
+        rho_M = alpha * self.rho_1 + (1 - alpha) * self.rho_2
+        mu_M = alpha * self.mu_1 + (1 - alpha) * self.mu_2
 
-        f_alpha_t = self.detect_faulty_derivative(alpha_t, 'alpha_xx')
-        f_alpha_xx = self.detect_faulty_derivative(alpha_xx, 'alpha_xx')
-        f_alpha_yy = self.detect_faulty_derivative(alpha_yy, 'alpha_yy')
-        f_alpha_zz = self.detect_faulty_derivative(alpha_zz, 'alpha_zz')
-        f_alpha_xy = self.detect_faulty_derivative(alpha_xy, 'alpha_xy')
-        f_alpha_xz = self.detect_faulty_derivative(alpha_xz, 'alpha_xz')
-        f_alpha_yz = self.detect_faulty_derivative(alpha_yz, 'alpha_yz')
+        # derivatives of viscosity mixture required for viscous term in NSE
+        mu_x = (self.mu_1 - self.mu_2) * alpha_x
+        mu_y = (self.mu_1 - self.mu_2) * alpha_y
+        mu_z = (self.mu_1 - self.mu_2) * alpha_z
 
         # get dimensionless numbers
         one_Re = mu_M / (self.rho_ref * self.U_ref * self.L_ref)  # 1/Re
         one_Re_x = mu_x / (self.rho_ref * self.U_ref * self.L_ref)  # 1/(dRe/dx)
         one_Re_y = mu_y / (self.rho_ref * self.U_ref * self.L_ref)  # 1/(dRe/dy)
         one_Re_z = mu_z / (self.rho_ref * self.U_ref * self.L_ref)  # 1/(dRe/dz)
-        one_We = sigma / (self.rho_ref * self.U_ref ** 2 * self.L_ref)  # 1/We
-        one_Fr2 = g * self.L_ref / self.U_ref ** 2  # 1/(Fr^2)
+        one_We = self.sigma / (self.rho_ref * self.U_ref ** 2 * self.L_ref)  # 1/We
+        one_Fr2 = self.g * self.L_ref / self.U_ref ** 2  # 1/(Fr^2)
 
         # surface tension term (requires error handling due to possible zero division)
         abs_interface_grad = torch.sqrt(
@@ -442,7 +473,7 @@ class HGPIFuNet(BasePIFuNet):
         residual_mask = torch.zeros_like(curvature)
         for i in range(self.opt.n_vel_pres_data):
             # print(points[:, 1, i])
-            if points[:, 1, i] >= y_ground:
+            if points[:, 1, i] >= self.y_ground:
                 residual_mask[:, :, i] = 1
             else:
                 residual_mask[:, :, i] = 0
@@ -468,19 +499,42 @@ class HGPIFuNet(BasePIFuNet):
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (
                                       u_z + w_x) - f_sigma_z
 
-        loss_x = F.mse_loss(res_momentum_x * residual_mask, torch.zeros_like(res_momentum_x))
-        loss_y = F.mse_loss(res_momentum_y * residual_mask, torch.zeros_like(res_momentum_y))
-        loss_z = F.mse_loss(res_momentum_z * residual_mask, torch.zeros_like(res_momentum_z))
-        nse_loss = loss_x + loss_y + loss_z
 
-        ''' Phase field advection and continuity equation losses'''
-        phase_adv_residual = alpha_t + u * alpha_x + v * alpha_y + w * alpha_z
-        phase_adv_loss = F.mse_loss(phase_adv_residual * residual_mask, torch.zeros_like(phase_adv_residual))
+        ''' Phase field advection and continuity equation resi'''
+        res_phase_adv = alpha_t + u * alpha_x + v * alpha_y + w * alpha_z
+        res_conti = u_x + v_y + w_z
 
-        conti_residual = u_x + v_y + w_z
-        conti_loss = F.mse_loss(conti_residual * residual_mask, torch.zeros_like(conti_residual))
+        # Mask out solid region of domain
+        res_momentum_x = res_momentum_x * residual_mask
+        res_momentum_y = res_momentum_y * residual_mask
+        res_momentum_z = res_momentum_z * residual_mask
+        res_phase_adv = res_phase_adv * residual_mask
+        res_conti = res_conti * residual_mask
 
-        return conti_loss, phase_adv_loss, nse_loss
+
+        # get RBA update with local Lagrange multipliers
+        res_momentum_x, RBA_mom_x = self.get_RBA_residual(res_momentum_x)
+        res_momentum_y, RBA_mom_y = self.get_RBA_residual(res_momentum_y)
+        res_momentum_z, RBA_mom_z = self.get_RBA_residual(res_momentum_z)
+        res_phase_adv, RBA_phase_adv = self.get_RBA_residual(res_phase_adv)
+        res_conti, RBA_conti = self.get_RBA_residual(res_conti)
+
+        # plot RBA
+        #plot_data_sample(self.x, self.y, self.z, RBA_mom_x, 0.8, 1.2)
+        #plot_data_sample(self.x, self.y, self.z, RBA_mom_y, 0.8, 1.2)
+        #plot_data_sample(self.x, self.y, self.z, RBA_mom_z, 0.8, 1.2)
+        #plot_data_sample(self.x, self.y, self.z, RBA_phase_adv, 0.8, 1.2)
+        #plot_data_sample(self.x, self.y, self.z, RBA_conti, 0.8, 1.2)
+
+        loss_momentum_x = F.mse_loss(res_momentum_x, torch.zeros_like(res_momentum_x))
+        loss_momentum_y = F.mse_loss(res_momentum_y, torch.zeros_like(res_momentum_y))
+        loss_momentum_z = F.mse_loss(res_momentum_z, torch.zeros_like(res_momentum_z))
+
+        phase_adv_loss = F.mse_loss(res_phase_adv, torch.zeros_like(res_phase_adv))
+
+        conti_loss = F.mse_loss(res_conti, torch.zeros_like(res_conti))
+
+        return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z
 
     def forward(self, images, points, calibs, transforms=None, labels=None, labels_u=None,
                 labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
@@ -496,23 +550,18 @@ class HGPIFuNet(BasePIFuNet):
         res_PINN = self.get_non_dimensional_pred()
 
         # get the data loss for alpha, (u,w,w) velocity components and pressure
-        error_data = self.get_error()
-        error_data_vel = self.get_velocity_loss()
-        error_data_pres = self.get_pressure_loss()
+        loss_data_alpha = self.get_error()
+        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss()
+        loss_data_p = self.get_pressure_loss()
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
-            error_conti, error_phase_conv, error_nse = self.get_pde_loss(points=points)
+            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=points)
         else:
-            error_conti = error_data * 0
-            error_phase_conv = error_data * 0
-            error_nse = error_data * 0
+            loss_conti = loss_data_alpha * 0
+            loss_phase_conv = loss_data_alpha * 0
+            loss_momentum_x = loss_data_alpha * 0
+            loss_momentum_y = loss_data_alpha * 0
+            loss_momentum_z = loss_data_alpha * 0
 
-        w_vel = self.opt.w_vel
-        w_pres = self.opt.w_pres
-        w_conti = self.opt.w_conti
-        w_phase = self.opt.w_phase
-        w_nse = self.opt.w_nse
-        error_total = error_data + w_vel * error_data_vel + w_pres * error_data_pres + w_conti * error_conti + w_phase * error_phase_conv + w_nse * error_nse
-
-        return res, res_PINN, error_total, error_data, w_vel * error_data_vel, w_pres * error_data_pres, w_conti * error_conti, w_phase * error_phase_conv, w_nse * error_nse
+        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w,  loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z

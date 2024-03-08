@@ -2,6 +2,8 @@ from torch.utils.data import Dataset
 import numpy as np
 import os
 import random
+import json
+import time
 import torchvision.transforms as transforms
 from PIL import Image, ImageOps
 import cv2
@@ -9,7 +11,6 @@ import torch
 from PIL.ImageFilter import GaussianBlur
 import trimesh
 import logging
-import time
 import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
 
@@ -200,11 +201,8 @@ class TrainDataset(Dataset):
 
         for vid in view_ids:
             param_path = os.path.join(self.PARAM, subject, '%d_%d_%02d.npy' % (vid, pitch, 0))
-            # NEW: Load .png images instead of .jpg
-            # render_path = os.path.join(self.RENDER, subject, '%d_%d_%02d.jpg' % (vid, pitch, 0))
             render_path = os.path.join(self.RENDER, subject, '%d_%d_%02d.png' % (vid, pitch, 0))
             mask_path = os.path.join(self.MASK, subject, '%d_%d_%02d.png' % (vid, pitch, 0))
-            # print(render_path)
 
             # loading calibration data
             param = np.load(param_path, allow_pickle=True)
@@ -217,17 +215,16 @@ class TrainDataset(Dataset):
             # model rotation
             R = param.item().get('R')
 
-            #print('ortho_ratio: ', ortho_ratio)
-            #print('scale: ', scale)
-            #print('center: ', center)
-            #print('R: ', R)
-
             translate = -np.matmul(R, center).reshape(3, 1)
             extrinsic = np.concatenate([R, translate], axis=1)
             extrinsic = np.concatenate([extrinsic, np.array([0, 0, 0, 1]).reshape(1, 4)], 0)
             # Match camera space to image pixel space
             scale_intrinsic = np.identity(4)
             scale_intrinsic[0, 0] = scale / ortho_ratio
+            ''' The negative sign here causes KOS to be flipped 
+            -> self-consistent for PIFu (matches image space and 3D-domain), 
+            but flipped KOS in PINN does not work for PDE-loss
+            -> flip back in geometry.py for PINN coordinates'''
             scale_intrinsic[1, 1] = -scale / ortho_ratio
             scale_intrinsic[2, 2] = scale / ortho_ratio
             # Match image pixel space to image uv space
@@ -296,8 +293,6 @@ class TrainDataset(Dataset):
             calib = torch.Tensor(np.matmul(intrinsic, extrinsic)).float()
             extrinsic = torch.Tensor(extrinsic).float()
 
-            #print('calib: ',calib)
-
             mask = transforms.Resize(self.load_size)(mask)
             mask = transforms.ToTensor()(mask).float()
             mask_list.append(mask)
@@ -318,7 +313,8 @@ class TrainDataset(Dataset):
 
     def select_sampling_method(self, subject):
         # for testing - consider specific time step
-        #subject = '0400'
+        # subject = '0001'
+        # subject = 'droplet0_1'
         '''
         returns samples and labels for (alpha,u,v,w,p) in B_MIN,B_MAX - [256,256,256] domain
         '''
@@ -379,30 +375,37 @@ class TrainDataset(Dataset):
 
         # Load (u,v,w,p) fields for PINN
         # transformation (rotation, translation, scaling) is handled in HGPIFuNet Projection -> geometry.py
-        # start_time = time.time()
         u_grid = np.load(os.path.join(self.VEL, subject, 'u_train.npy'), allow_pickle=True)
         v_grid = np.load(os.path.join(self.VEL, subject, 'v_train.npy'), allow_pickle=True)
         w_grid = np.load(os.path.join(self.VEL, subject, 'w_train.npy'), allow_pickle=True)
         p_grid = np.load(os.path.join(self.PRES, subject, 'p_train.npy'), allow_pickle=True)
-        # for validation only delete later
-        #c_grid = np.load(os.path.join(self.VEL, subject, 'c_train.npy'), allow_pickle=True)
-        # print('time for data loading: ', time.time() - start_time)
+        # for validation only
+        # c_grid = np.load(os.path.join(self.VEL, subject, 'c_train.npy'), allow_pickle=True)
 
-        # Creating new grid to map to
-        # set the limits (x_min,x_max,etc.) and scale according with mesh processing
-        xmax = 0.00201 * 50000
-        xmin = - 0.00201 * 50000
-        ymin = -1e-5 * 50000 - 2.75
-        ymax = 0.005 * 50000 - 2.75
-        yground = 1e-5 * 6 * 50000 - 2.75  # 60um from y0
-        zmax = 0.0018 * 50000
-        zmin = - 0.0018 * 50000
-        x = np.linspace(xmin, xmax, 134)
-        y = np.linspace(ymin, ymax, 167)
-        z = np.linspace(zmin, zmax, 120)
+        # Read fluid properties and simulation domain
+        with open(os.path.join(self.root, "flow_case.json"), "r") as f:
+            flow_case = json.load(f)
+
+        # non-dimensionalize the label data
+        U_ref = flow_case["U_0"]  # impact velocity
+        L_ref = flow_case["rp"]   # image reproduction scale -> domain size
+        rho_ref = flow_case["rho_1"]  # density of liquid phase (water)
+
+        # Creating new grid to map to - set the limits (x_min,x_max,etc.) and scale according with mesh processing
+        x_min = flow_case["x_min"]
+        x_max = flow_case["x_max"]
+        y_min = flow_case["y_min"]
+        y_max = flow_case["y_max"]
+        y_ground = flow_case["y_ground"]  # 60um from y0
+        z_min = flow_case["z_min"]
+        z_max = flow_case["z_max"]
+        x = np.linspace(x_min, x_max, flow_case["x_res"])
+        y = np.linspace(y_min, y_max, flow_case["y_res"])
+        z = np.linspace(z_min, z_max, flow_case["z_res"])
         grid_points = (x, y, z)
 
-        # Interpolation is quite costly, therefore only a small number of data points should be used for (u,v,w,p)
+        # Limit number of data points (u,v,w,p) to amount of sampling points
+        # TODO: implement seperate sampling for data and pde residual points
         if self.n_vel_pres_data >= samples.size(dim=1):
             self.n_vel_pres_data = samples.size(dim=1)
 
@@ -412,19 +415,14 @@ class TrainDataset(Dataset):
         labels_v = interpn(grid_points, v_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
         labels_w = interpn(grid_points, w_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
         labels_p = interpn(grid_points, p_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
-        #labels_c = interpn(grid_points, c_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
+        # labels_c = interpn(grid_points, c_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
 
         # rotate vector field to match PINN domain (x,y,z) -> (x,z,y)
         labels_u_r = labels_u
         labels_v_r = labels_w
         labels_w_r = labels_v
 
-        # TODO: implement as reader from .json dict
-        # non-dimensionalize the label data
-        U_ref = 0.62  # impact velocity
-        L_ref = 256 / 93.809 / 10 ** 3  # Droplet diameter or image reproduction scale
-        rho_ref = 998.2  # selected density of water
-
+        # make data dimensionless
         labels_u_dimless = labels_u_r / U_ref
         labels_v_dimless = labels_v_r / U_ref
         labels_w_dimless = labels_w_r / U_ref
@@ -445,15 +443,15 @@ class TrainDataset(Dataset):
             z = samples[2, :self.n_vel_pres_data]
             labels = labels[:, :self.n_vel_pres_data]
 
-            PLOT_ONLY_GROUND = False
+            PLOT_ONLY_GROUND = True
             if PLOT_ONLY_GROUND:
-                x = x[y < yground]
-                z = z[y < yground]
-                labels = labels[:, y < yground]
-                labels_p = labels_p[y < yground]
-                labels_u = labels_u[y < yground]
-                labels_w_r = labels_w_r[y < yground]
-                y = y[y < yground]
+                x = x[y < y_ground]
+                z = z[y < y_ground]
+                labels = labels[:, y < y_ground]
+                labels_p = labels_p[y < y_ground]
+                labels_u = labels_u[y < y_ground]
+                labels_w_r = labels_w_r[y < y_ground]
+                y = y[y < y_ground]
 
                 x = x[y > - 2.75]
                 z = z[y > - 2.75]
@@ -463,20 +461,18 @@ class TrainDataset(Dataset):
                 labels_w_r = labels_w_r[y > - 2.75]
                 y = y[y > - 2.75]
 
-            mappable = ax.scatter(x, y, z, s=10, c=labels_p, vmin=-500, vmax=500, cmap='viridis')
-            # These should be the same if everything went correctly
-            # mappable = ax.scatter(x, y, z, s=10, c=labels_c, cmap='coolwarm')
-            # mappable = ax.scatter(x, y, z, s=10, c=labels_v_r, vmin=-0.5, vmax=0.5, cmap='bwr')
+            # mappable = ax.scatter(x, y, z, s=10, c=labels_p, vmin=-500, vmax=500, cmap='viridis')
+            #mappable = ax.scatter(x, y, z, s=10, c=labels_u, cmap='coolwarm')
+            mappable = ax.scatter(x, y, z, s=2, c=labels, cmap='coolwarm')
             plt.colorbar(mappable)
             ax.set_xlabel('$X$')
             ax.set_ylabel('$Y$')
             ax.set_zlabel('$Z$')
-            # ax.set_xlim3d(xmin, xmax)
-            # ax.set_ylim3d(ymin, yground)
-            # ax.set_zlim3d(zmin, zmax)
+            # ax.set_xlim3d(x_min, x_max)
+            # ax.set_ylim3d(y_min, y_ground)
+            # ax.set_zlim3d(z_min, z_max)
             ax.set_box_aspect((1, 1, 1))
             plt.show()
-            plt.waitforbuttonpress()
 
         del mesh
         return {

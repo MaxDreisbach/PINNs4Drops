@@ -60,7 +60,10 @@ class SurfaceClassifier(nn.Module):
             if i != len(self.filters) - 1:
                 #y = F.leaky_relu(y)
                 ''' Changed to tanh activation function for PINN'''
+                # TODO: sine or GELU activation
                 y = torch.tanh(y)
+                #y = nn.GELU(y)
+                #y = torch.sin(y)
 
             if self.num_views > 1 and i == len(self.filters) // 2:
                 y = y.view(
@@ -71,15 +74,16 @@ class SurfaceClassifier(nn.Module):
                 ).mean(dim=1)
 
         if self.last_op:
-            y = self.last_op(y)
+            #y = self.last_op(y)
             '''
-            Normalisation of the labels for (u,v,w,p) -> all outputs of MLP can have sigmoid activation function as labels are normalised to [0, 1]
+            Normalisation of the labels for (u,v,w,p) 
+            -> all outputs of MLP can have sigmoid activation function as labels are normalised to [0, 1]
+            -> sigmoid forces output to be either 0 or 1 -> linear layer (no activation for velocity and exponential for p)
             
-            Alternative: different activation functions for each output variable -> alpha -> sigmoid, (u,v,p) - None, p ->exponential
+            Different activation functions for each output variable -> alpha -> sigmoid, (u,v,p) - None, p ->exponential
             (see Buhendwa et al. (2021) - https://doi.org/10.1016/j.mlwa.2021.100029)
             '''
-            #y = torch.stack((nn.Sigmoid()(y[:, 0, :]), y[:, 1, :], y[:, 2, :], y[:, 3, :], nn.ELU()(y[:, 4, :])), dim=1)
-            #y = torch.cat((nn.Sigmoid()(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
+            y = torch.cat((nn.Sigmoid()(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
             #print('MLP output: ', y)
             #print('MLP output shape: ', y.size())
 

@@ -67,6 +67,7 @@ def train(opt):
         set_eval()
         print('calc error (validation) for steps ...')
         plot_timesteps = [0, 5, 10, 15, 50, 100]
+        #plot_timesteps = [10, 15]
 
         dataset = []
         for idx in plot_timesteps:

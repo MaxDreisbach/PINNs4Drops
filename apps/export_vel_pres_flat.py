@@ -122,6 +122,7 @@ def extractFromSimulation(file):
     Y = df['Points:1'].to_numpy()
     Z = df['Points:2'].to_numpy()
 
+    C = df['C'].to_numpy()
     U = df['U:0'].to_numpy()
     V = df['U:1'].to_numpy()
     W = df['U:2'].to_numpy()
@@ -130,6 +131,7 @@ def extractFromSimulation(file):
     # project rotated U vector field to U and V
     U, V = project_velocity_vector_field(X, Y, Z, U, V)
 
+    c_mapped = map_field(X, Y, Z, C)
     u_mapped = map_field(X, Y, Z, U)
     v_mapped = map_field(X, Y, Z, V)
     w_mapped = map_field(X, Y, Z, W)
@@ -141,6 +143,7 @@ def extractFromSimulation(file):
     x_resampled = resample_field(X, Y, Z, X, n_x=re_x, n_y=re_y, n_z=re_z)
     y_resampled = resample_field(X, Y, Z, Y, n_x=re_x, n_y=re_y, n_z=re_z)
     z_resampled = resample_field(X, Y, Z, Z, n_x=re_x, n_y=re_y, n_z=re_z)
+    c_resampled = resample_field(X, Y, Z, c_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     u_resampled = resample_field(X, Y, Z, u_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     v_resampled = resample_field(X, Y, Z, v_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     w_resampled = resample_field(X, Y, Z, w_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
@@ -152,12 +155,13 @@ def extractFromSimulation(file):
     #plot_iso_surface(x_resampled, y_resampled, z_resampled, p_resampled)
 
     # rotate to match PIFu coordinate system (x,y,z) -> (x,z,y)
+    c_resampled = c_resampled.transpose((1, 2, 0))
     u_resampled = u_resampled.transpose((1, 2, 0))
     v_resampled = v_resampled.transpose((1, 2, 0))
     w_resampled = w_resampled.transpose((1, 2, 0))
     p_resampled = p_resampled.transpose((1, 2, 0))
 
-    return x_resampled, y_resampled, z_resampled, u_resampled, v_resampled, w_resampled, p_resampled
+    return x_resampled, y_resampled, z_resampled, c_resampled, u_resampled, v_resampled, w_resampled, p_resampled
 
 
 pathToSimulation = "/net/istmhome/users/hi227/Data/Simulation_data/"
@@ -178,11 +182,8 @@ print('number of files to process: ', len(out_names))
 
 for i, file in enumerate(dirnames):
 
-    if i <= 192:
-        continue
-
     iter_start_time = time.time()
-    x_dat, y_dat, z_dat, u_dat, v_dat, w_dat, p_dat = extractFromSimulation(file)
+    x_dat, y_dat, z_dat, c_dat, u_dat, v_dat, w_dat, p_dat = extractFromSimulation(file)
 
     # saving data
     savedirvel = os.path.join(out_dir, 'VEL', out_names[i])
@@ -193,7 +194,7 @@ for i, file in enumerate(dirnames):
     if not os.path.exists(savedirpres):
         os.mkdir(savedirpres)
 
-
+    np.save(os.path.join(savedirvel, "c_train.npy"), c_dat)
     np.save(os.path.join(savedirvel, "u_train.npy"), u_dat)
     np.save(os.path.join(savedirvel, "v_train.npy"), v_dat)
     np.save(os.path.join(savedirvel, "w_train.npy"), w_dat)

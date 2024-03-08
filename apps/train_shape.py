@@ -50,7 +50,7 @@ def train(opt):
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
     optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
-    #optimizerG = torch.optim.Adam(netG.parameters(), lr=opt.learning_rate)
+    # optimizerG = torch.optim.Adam(netG.parameters(), lr=opt.learning_rate)
     lr = opt.learning_rate
     print('Using Network: ', netG.name)
 
@@ -115,21 +115,39 @@ def train(opt):
             label_tensor_p = train_data['labels_p'].to(device=cuda)
 
             iter_data_time = time.time()
-            res, res_PINN, error, error_data, error_data_vel, error_data_pres, error_conti, error_phase_conv, error_nse = netG.forward(
+            res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = netG.forward(
                 image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
-                labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, get_PINN_loss=True)
+                labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
+                get_PINN_loss=True)
 
-            #turn on PINN losses after initializing network only with alpha field for a few iterations
+            # apply weighting to loss terms
+            loss_data_u = opt.weight_u * loss_data_u
+            loss_data_v = opt.weight_v * loss_data_v
+            loss_data_w = opt.weight_w * loss_data_w
+            loss_data_p = opt.weight_p * loss_data_p
+            loss_conti = opt.weight_conti * loss_conti
+            loss_phase_conv = opt.weight_phase * loss_phase_conv
+            loss_momentum_x = opt.weight_mom_x * loss_momentum_x
+            loss_momentum_y = opt.weight_mom_y * loss_momentum_y
+            loss_momentum_z = opt.weight_mom_z * loss_momentum_z
+
+            # turn on PDE and u,v,w,p losses after initializing network only with alpha field for a few iterations
+            # this is done because the other losses overweight the alpha loss in early training otherwise
             if train_idx < 1000:
-                error_conti = error_conti * (train_idx/1000)
-                error_phase_conv = error_phase_conv * (train_idx/1000)
-                error_nse = error_nse * (train_idx/1000)
-                #error_data_vel = error_data_vel * 0.1
-                #error_data_pres = error_data_pres * 0.1
-                error = error_data + error_data_vel + error_data_pres + error_conti + error_phase_conv + error_nse
+                loss_data_u = loss_data_u * (train_idx / 1000)
+                loss_data_v = loss_data_w * (train_idx / 1000)
+                loss_data_w = loss_data_w * (train_idx / 1000)
+                loss_data_p = loss_data_p * (train_idx / 1000)
+                loss_conti = loss_conti * (train_idx / 1000)
+                loss_phase_conv = loss_phase_conv * (train_idx / 1000)
+                loss_momentum_x = loss_momentum_x * (train_idx / 1000)
+                loss_momentum_y = loss_momentum_y * (train_idx / 1000)
+                loss_momentum_z = loss_momentum_z * (train_idx / 1000)
+
+            loss_total = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x + loss_momentum_y + loss_momentum_z
 
             optimizerG.zero_grad()
-            error.backward()
+            loss_total.backward()
             optimizerG.step()
 
             iter_net_time = time.time()
@@ -137,9 +155,11 @@ def train(opt):
                     iter_net_time - epoch_start_time)
 
             if train_idx % opt.freq_plot == 0:
-                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | Err_t: {4:.06f} | Err_a: {5:.06f} | Err_v: {6:.06f} | Err_p: {7:.06f} | Err_c: {8:.9f} | Err_ph: {9:.9f} | Err_nse: {10:.9f} | LR: {11:.06f} | Sigma: {12:.02f} | dataT: {13:.05f} | netT: {14:.05f} | ETA: {15:02d}:{16:02d}\n'.format(
-                    opt.name, epoch, train_idx, len(train_data_loader), error.item(),
-                    error_data.item(), error_data_vel.item(), error_data_pres.item(), error_conti.item(), error_phase_conv.item(), error_nse.item(),
+                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | L_t: {4:.06f} | L_a: {5:.06f} | L_u: {6:.06f} | L_v: {7:.06f} | L_w: {8:.06f} | L_p: {9:.06f} | L_c: {10:.9f} | L_ph: {11:.9f} | L_mom_x: {12:.9f} | L_mom_y: {13:.9f} | L_mom_z: {14:.9f} | LR: {15:.06f} | Sigma: {16:.02f} | dataT: {17:.05f} | netT: {18:.05f} | ETA: {19:02d}:{20:02d}\n'.format(
+                    opt.name, epoch, train_idx, len(train_data_loader), loss_total.item(),
+                    loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(),
+                    loss_data_p.item(), loss_conti.item(),
+                    loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item(),
                     lr, opt.sigma, iter_data_time - iter_start_time, iter_net_time - iter_data_time, int(eta // 60),
                     int(eta - 60 * (eta // 60)))
                 print(loss_log_s)

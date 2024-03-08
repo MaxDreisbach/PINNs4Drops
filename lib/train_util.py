@@ -188,18 +188,23 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False
             label_tensor_p = data['labels_p'].to(device=cuda).unsqueeze(0)
             time_step_label = data['time_step'].to(device=cuda)
 
-            res, res_PINN, error, error_data, error_vel, error_pres, error_conti, error_phase_conv, error_nse = net.forward(image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
+            res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = net.forward(image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
                    labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, get_PINN_loss=False)
 
+            loss = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x +loss_momentum_z +loss_momentum_z
             IOU, prec, recall = compute_acc(res, label_tensor)
 
             if plot_results:
+                labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w,
+                                                                             calib_tensor)
+                # plot compound prediction (pressure contours, alpha contour line, velocity vector field)
+                plot_compound(opt, sample_tensor, res_PINN, label_tensor[0, 0, :], labels_u_proj[0, :], label_tensor_v[0, :], label_tensor_p[0, :], 'z', 'compound',
+                                     'pres', name, ds)
 
                 # plot error in alpha field
-                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'z','alpha', 'alpha', name, ds)
+                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'z', 'alpha', 'alpha', name, ds)
 
                 #plot velocity errors
-                labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w, calib_tensor)
                 plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], 'z', 'u',
                                      'vel', name, ds)
                 plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], 'z', 'v',
@@ -208,24 +213,26 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False
                                      'vel', name, ds)
 
                 #plot error in pressure field
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor_p[0, :], 'z', 'p',
+                plot_contour_w_alpha_res_gt(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor[0, 0, :], label_tensor_p[0, :], 'z', 'p',
                                      'pres', name, ds)
 
                 # plot 3D-contours
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], 'alpha', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], 'u', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], 'v', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
-                plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
+                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], 'alpha', name, ds)
+                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], 'u', name, ds)
+                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], 'v', name, ds)
+                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
+                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
 
-            print('{0}/{1}: {6} | Error: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f}'.format(idx, num_tests, error.item(), IOU.item(), prec.item(), recall.item(), name))
-            error_arr.append(error.item())
-            error_data_arr.append(error_data.item())
-            error_vel_arr.append(error_vel.item())
-            error_pres_arr.append(error_pres.item())
-            error_conti_arr.append(error_conti.item())
-            error_phase_arr.append(error_phase_conv.item())
-            error_nse_arr.append(error_nse.item())
+            print('{0}/{1}: {6} | Loss: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name))
+            error_arr.append(loss.item())
+            error_data_arr.append(loss_data_alpha.item())
+            loss_data_vel = loss_data_u + loss_data_v + loss_data_w
+            error_vel_arr.append(loss_data_vel.item())
+            error_pres_arr.append(loss_data_p.item())
+            error_conti_arr.append(loss_conti.item())
+            error_phase_arr.append(loss_phase_conv.item())
+            loss_momentum = loss_momentum_x + loss_momentum_y + loss_momentum_z
+            error_nse_arr.append(loss_momentum.item())
             IOU_arr.append(IOU.item())
             prec_arr.append(prec.item())
             recall_arr.append(recall.item())
