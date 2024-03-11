@@ -71,6 +71,8 @@ class BaseOptions():
                              help='instance normalization or batch normalization or group normalization')
 
         # hg filter specify
+        g_model.add_argument('--freeze_hourglas', default=False, type=bool,
+                             help='exclude layers of hourglas network from training')
         g_model.add_argument('--num_stack', type=int, default=4, help='# of hourglass')
         g_model.add_argument('--num_hourglass', type=int, default=2, help='# of stacked layer of hourglass')
         g_model.add_argument('--skip_hourglass', action='store_true', help='skip connection in hourglass')
@@ -87,11 +89,11 @@ class BaseOptions():
                              help='using tanh after last conv of image_filter network')
 
         ''' NEW: Added loss weights for PINN'''
-        g_model.add_argument('--weight_u', default=100, type=float, help='weight of u velocity data loss')
-        g_model.add_argument('--weight_v', default=100, type=float, help='weight of v velocity data loss')
-        g_model.add_argument('--weight_w', default=100, type=float, help='weight of w velocity data loss')
-        g_model.add_argument('--weight_p', default=100, type=float, help='weight of pressure data loss')
-        g_model.add_argument('--weight_conti', default=10000 , type=float, help='weight of continuity pde loss')
+        g_model.add_argument('--weight_u', default=50, type=float, help='weight of u velocity data loss')
+        g_model.add_argument('--weight_v', default=50, type=float, help='weight of v velocity data loss')
+        g_model.add_argument('--weight_w', default=50, type=float, help='weight of w velocity data loss')
+        g_model.add_argument('--weight_p', default=150, type=float, help='weight of pressure data loss')
+        g_model.add_argument('--weight_conti', default=100000 , type=float, help='weight of continuity pde loss')
         g_model.add_argument('--weight_phase', default=10000, type=float, help='weight of phase advection pde loss')
         g_model.add_argument('--weight_mom_x', default=10000, type=float, help='weight of x momentum pde loss')
         g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')

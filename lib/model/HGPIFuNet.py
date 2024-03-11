@@ -80,7 +80,14 @@ class HGPIFuNet(BasePIFuNet):
         # for PINN (u,v,w,p) data loss term
         self.n_vel_pres_data = self.opt.n_vel_pres_data
         self.num_views = self.opt.num_views
+
         self.image_filter = HGFilter(opt)
+        if opt.freeze_hourglas:
+            for i, layer in enumerate(self.image_filter.children()):
+                print('freezing hourglas layer ', i)
+                for parameter in layer.parameters():
+                    parameter.requires_grad = False
+
 
         if not opt.use_cond_MLP:
             print('Using standard MLP architecture from PIFuNet')
@@ -294,6 +301,17 @@ class HGPIFuNet(BasePIFuNet):
         '''
         return self.im_feat_list[-1]
 
+
+    def get_solid_domain_mask(self, points):
+        ground_mask = torch.zeros_like(points[:, :1, :])
+        for i in range(self.opt.n_vel_pres_data):
+            if points[:, 1, i] >= self.y_ground:
+                ground_mask[:, :, i] = 1
+            else:
+                ground_mask[:, :, i] = 0
+        return ground_mask
+
+
     def get_RBA_residual(self,  residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
         lambda_k = 0.8 + self.lr * torch.abs(residuals) / res_max.item()
@@ -317,19 +335,22 @@ class HGPIFuNet(BasePIFuNet):
 
         return error
 
-    def get_velocity_loss(self):
+    def get_velocity_loss(self, points):
         '''
         Calculates MSE-loss of velocity data sampling points
         '''
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
+        #Do not calculate loss for sample points below surface in solid domain and within grooves
+        # TODO: Test if masking works
+        ground_mask = self.get_solid_domain_mask(points)
         pred_u = self.pred[:, 1, :self.n_vel_pres_data]
         pred_v = self.pred[:, 2, :self.n_vel_pres_data]
         pred_w = self.pred[:, 3, :self.n_vel_pres_data]
-        error_u = self.error_term(pred_u, self.labels_u)
-        error_v = self.error_term(pred_v, self.labels_v)
-        error_w = self.error_term(pred_w, self.labels_w)
+        error_u = self.error_term(pred_u * ground_mask, self.labels_u * ground_mask)
+        error_v = self.error_term(pred_v * ground_mask, self.labels_v * ground_mask)
+        error_w = self.error_term(pred_w * ground_mask, self.labels_w * ground_mask)
 
         return error_u, error_v, error_w
 
@@ -469,17 +490,6 @@ class HGPIFuNet(BasePIFuNet):
         f_sigma_y = one_We * curvature * alpha_y
         f_sigma_z = one_We * curvature * alpha_z
 
-        ''' No residual calculation for sampling points within solid substrate -> Masking'''
-        residual_mask = torch.zeros_like(curvature)
-        for i in range(self.opt.n_vel_pres_data):
-            # print(points[:, 1, i])
-            if points[:, 1, i] >= self.y_ground:
-                residual_mask[:, :, i] = 1
-            else:
-                residual_mask[:, :, i] = 0
-
-        # zero_residual_points = (residual_mask == 0).sum()
-        # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
 
         '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 
@@ -504,12 +514,15 @@ class HGPIFuNet(BasePIFuNet):
         res_phase_adv = alpha_t + u * alpha_x + v * alpha_y + w * alpha_z
         res_conti = u_x + v_y + w_z
 
-        # Mask out solid region of domain
-        res_momentum_x = res_momentum_x * residual_mask
-        res_momentum_y = res_momentum_y * residual_mask
-        res_momentum_z = res_momentum_z * residual_mask
-        res_phase_adv = res_phase_adv * residual_mask
-        res_conti = res_conti * residual_mask
+        ''' No residual calculation for sampling points within solid substrate -> Masking'''
+        ground_mask = self.get_solid_domain_mask(points)
+        # zero_residual_points = (ground_mask == 0).sum()
+        # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
+        res_momentum_x = res_momentum_x * ground_mask
+        res_momentum_y = res_momentum_y * ground_mask
+        res_momentum_z = res_momentum_z * ground_mask
+        res_phase_adv = res_phase_adv * ground_mask
+        res_conti = res_conti * ground_mask
 
 
         # get RBA update with local Lagrange multipliers
@@ -551,7 +564,7 @@ class HGPIFuNet(BasePIFuNet):
 
         # get the data loss for alpha, (u,w,w) velocity components and pressure
         loss_data_alpha = self.get_error()
-        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss()
+        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
         loss_data_p = self.get_pressure_loss()
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
