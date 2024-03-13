@@ -28,8 +28,8 @@ y_res = 167
 z_res = 120
 
 # variable ranges for min-max normalization
-x_norm_min = 550.0
-x_norm_max = -550.0
+x_norm_min = -400.0
+x_norm_max = 400.0
 t_norm_min = 0
 t_norm_max = 70.0
 u_norm_min = - 5.0

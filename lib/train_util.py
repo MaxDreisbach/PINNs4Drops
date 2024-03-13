@@ -202,18 +202,19 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False
                                      'pres', name, ds)
 
                 # plot error in alpha field
-                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], 'z', 'alpha', 'alpha', name, ds)
+                slice_dim = 'z'
+                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], slice_dim, 'alpha', 'alpha', name, ds)
 
                 #plot velocity errors
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], 'z', 'u',
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], slice_dim, 'u',
                                      'vel', name, ds)
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], 'z', 'v',
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], slice_dim, 'v',
                                      'vel', name, ds)
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 3, :], res[0, 0, :], labels_w_proj[0, :], 'z', 'w',
+                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 3, :], res[0, 0, :], labels_w_proj[0, :], slice_dim, 'w',
                                      'vel', name, ds)
 
                 #plot error in pressure field
-                plot_contour_w_alpha_res_gt(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor[0, 0, :], label_tensor_p[0, :], 'z', 'p',
+                plot_contour_w_alpha_res_gt(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor[0, 0, :], label_tensor_p[0, :], slice_dim, 'p',
                                      'pres', name, ds)
 
                 # plot 3D-contours

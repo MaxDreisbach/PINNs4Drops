@@ -74,6 +74,7 @@ class TrainDataset(Dataset):
         # Path setup
         self.root = self.opt.dataroot
         self.RENDER = os.path.join(self.root, 'RENDER')
+        #self.RENDER = os.path.join('./train_data_DFS2024A', 'RENDER')
         print('Render path: ', self.RENDER)
 
         self.MASK = os.path.join(self.root, 'MASK')
@@ -221,11 +222,8 @@ class TrainDataset(Dataset):
             # Match camera space to image pixel space
             scale_intrinsic = np.identity(4)
             scale_intrinsic[0, 0] = scale / ortho_ratio
-            ''' The negative sign here causes KOS to be flipped 
-            -> self-consistent for PIFu (matches image space and 3D-domain), 
-            but flipped KOS in PINN does not work for PDE-loss
-            -> flip back in geometry.py for PINN coordinates'''
-            scale_intrinsic[1, 1] = -scale / ortho_ratio
+            ''' The negative sign for flipping y-axis moved to index() in geometry.py to keep PINN coordinates consistent'''
+            scale_intrinsic[1, 1] = scale / ortho_ratio
             scale_intrinsic[2, 2] = scale / ortho_ratio
             # Match image pixel space to image uv space
             uv_intrinsic = np.identity(4)

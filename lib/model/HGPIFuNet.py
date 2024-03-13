@@ -214,14 +214,15 @@ class HGPIFuNet(BasePIFuNet):
             self.labels = labels
 
         if labels_u is not None and labels_v is not None and labels_w is not None:
+            #plot_data_sample(points[:, :1, :], points[:, 1:2, :], points[:, 2:3, :], labels_u, -2.0, 2.0)
             labels_u_proj, labels_w_proj = project_velocity_vector_field(labels_u, labels_w, calibs)
+            #plot_data_sample(points[:, :1, :], points[:, 1:2, :], points[:, 2:3, :], labels_u_proj, -2.0, 2.0)
 
             # normalizing the label data
             labels_u_proj = normalize(labels_u_proj, self.umin, self.umax)
             labels_v = normalize(labels_v, self.vmin, self.vmax)
             labels_w_proj = normalize(labels_w_proj, self.wmin, self.wmax)
             # print('u field mean: ', labels_u.mean().item(), 'max: ', labels_u.max().item(), 'min: ', labels_u.min().item())
-            # print('p field mean: ', labels_p.mean().item(), 'max: ', labels_p.max().item(), 'min: ', labels_p.min().item())
 
             self.labels_u = labels_u_proj
             self.labels_v = labels_v
@@ -244,22 +245,10 @@ class HGPIFuNet(BasePIFuNet):
         xy = xyz[:, :2, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
 
-        ''' Axis are flipped by the projection in PIFu to match image coordinates. 
-        ->  Axis need to flipped back for only the PINN input to be consistent with KOS in physics loss'''
-        x = -xyz[:, :1, :]
-        y = -xyz[:, 1:2, :]
-        z = -xyz[:, 2:3, :]
-
-        # Plot label data for debug
-        #plot_data_sample(x, y, z, self.labels, 0.0, 1.0)
-        #plot_data_sample(x, y, z, self.labels_u, 0.0, 1.0)
-        #plot_data_sample(x, y, z, self.labels_v, 0.0, 1.0)
-        #plot_data_sample(x, y, z, self.labels_w, 0.0, 1.0)
-
         '''non-dimensionalize coordinates'''
-        x_non_dim = x / self.L_ref
-        y_non_dim = y / self.L_ref
-        z_non_dim = z / self.L_ref
+        x_non_dim = xyz[:, :1, :] / self.L_ref
+        y_non_dim = xyz[:, 1:2, :] / self.L_ref
+        z_non_dim = xyz[:, 2:3, :] / self.L_ref
 
         '''Normalize data to [0,1] by min-max-normalization'''
         self.x_feat = normalize(x_non_dim, self.xmin, self.xmax)
@@ -280,9 +269,6 @@ class HGPIFuNet(BasePIFuNet):
             self.x = self.x_feat
             self.y = self.y_feat
             self.z = self.z_feat
-            # print('image feature size: ', image_feature.size())
-            # print('x size: ', self.x.size())
-            # print('t size: ', self.t.size())
 
             self.pred = self.surface_classifier(image_feature, self.x, self.y, self.z, self.t)
 

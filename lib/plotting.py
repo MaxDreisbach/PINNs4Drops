@@ -99,11 +99,11 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, ty
     # interpolate point cloud to 2D-plane
     grid_res = complex(0, opt.resolution)
     if plane_dim == 'x':
-        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-0.1:0.1:1j, -28:228:grid_res, -128:128:grid_res]
     if plane_dim == 'y':
-        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.9:8.1:1j, -128:128:grid_res]
     if plane_dim == 'z':
-        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
 
 
     pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
@@ -208,7 +208,6 @@ def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
     sample = np.vstack((sample_x, sample_y, sample_z)).T
-    #sample = samples.detach().cpu().numpy()
     label_p = labels_p.detach().cpu().numpy()
     label_alpha = labels_alpha.detach().cpu().numpy()
     pred = preds.detach().cpu().numpy()
@@ -217,11 +216,11 @@ def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels
     # interpolate point cloud to 2D-plane
     grid_res = complex(0, opt.resolution)
     if plane_dim == 'x':
-        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-0.1:0.1:1j, -28:228:grid_res, -128:128:grid_res]
     if plane_dim == 'y':
-        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.9:8.1:1j, -128:128:grid_res]
     if plane_dim == 'z':
-        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
 
     pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
     pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
@@ -322,12 +321,12 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     sample_z = samples[0, 2, :].detach().cpu().numpy()
     sample = np.vstack((sample_x, sample_y, sample_z)).T
     label_alpha = labels_alpha.detach().cpu().numpy()
-    label_u = -labels_u.detach().cpu().numpy()
+    label_u = labels_u.detach().cpu().numpy()
     label_v = labels_v.detach().cpu().numpy()
     label_p = labels_p.detach().cpu().numpy()
     res_PINN = res_PINN.detach().cpu().numpy()
     pred_alpha = res_PINN[0, 0, :]
-    pred_u = -res_PINN[0, 1, :]
+    pred_u = res_PINN[0, 1, :]
     pred_v = res_PINN[0, 2, :]
     pred_p = res_PINN[0, 4, :]
 
@@ -335,11 +334,11 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     # interpolate point cloud to 2D-plane
     grid_res = complex(0, opt.resolution)
     if plane_dim == 'x':
-        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-0.1:0.1:1j, -28:228:grid_res, -128:128:grid_res]
     if plane_dim == 'y':
-        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.9:8.1:1j, -128:128:grid_res]
     if plane_dim == 'z':
-        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
 
     def interpolate_grid(pred, sample, X, Y, Z):
         pred_interpn = griddata(sample, pred, (X, Y, Z), method='linear')
@@ -388,7 +387,7 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs[0].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
-    a2 = axs[1].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
+    a2 = axs[1].contour(x, y, label_alpha_plot, levels=levels_alpha, colors='k')
 
     skip = (slice(None, None, 10), slice(None, None, 10))
     q1 = axs[0].quiver(x[skip], y[skip], u_plot[skip], v_plot[skip], scale=7.5, scale_units='inches', color='black')

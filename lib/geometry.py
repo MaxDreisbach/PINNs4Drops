@@ -7,12 +7,20 @@ def index(feat, uv):
     :param feat: [B, C, H, W] image features
     :param uv: [B, 2, N] uv coordinates in the image plane, range [-1, 1]
     :return: [B, C, N] image features at the uv coordinates
+    grid specifies the sampling pixel locations normalized by the input spatial dimensions. Therefore, it should have
+    most values in the range of [-1, 1]. For example, values x = -1, y = -1 is the left-top pixel of input,
+    and values x = 1, y = 1 is the right-bottom pixel of input.
+    (https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html)
     '''
     uv = uv.transpose(1, 2)  # [B, N, 2]
     uv = uv.unsqueeze(2)  # [B, N, 1, 2]
+    ''' y-axis needs to be flipped so that top left corner is [-1, -1] instead of [-1 1]'''
+    u = uv[:, :, :, 0]
+    v = -uv[:, :, :, 1]
+    uv_flipped = torch.stack((u, v), dim=3)
     # NOTE: for newer PyTorch, it seems that training results are degraded due to implementation diff in F.grid_sample
     # for old versions, simply remove the aligned_corners argument.
-    samples = torch.nn.functional.grid_sample(feat, uv, align_corners=True)  # [B, C, N, 1]
+    samples = torch.nn.functional.grid_sample(feat, uv_flipped, align_corners=True)  # [B, C, N, 1]
     return samples[:, :, :, 0]  # [B, C, N]
 
 
@@ -54,7 +62,6 @@ def perspective(points, calibrations, transforms=None):
     xyz = torch.cat([xy, homo[:, 2:3, :]], 1)
     return xyz
 
-
 def project_velocity_vector_field(labels_u, labels_w, calibrations):
     '''
     Compute the projections of the velocity vector magnitudes, the transformation of the vector origin is performed
@@ -87,4 +94,6 @@ def project_velocity_vector_field(labels_u, labels_w, calibrations):
     #exit()
 
     return proj_labels_u, proj_labels_w
+
+
 

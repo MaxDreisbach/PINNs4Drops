@@ -49,12 +49,12 @@ def train(opt):
 
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
-    # optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
+    optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
     # optimizerG = torch.optim.Adam(netG.parameters(), lr=opt.learning_rate, amsgrad=True)
 
     # optimizer variants for partly frozen network (hourglas feature extraction frozen)
     # optimizerG = torch.optim.RMSprop(filter(lambda p: p.requires_grad, netG.parameters()), lr=opt.learning_rate, momentum=0, weight_decay=0)
-    optimizerG = torch.optim.Adam(filter(lambda p: p.requires_grad, netG.parameters()), lr=opt.learning_rate, amsgrad=True)
+    # optimizerG = torch.optim.Adam(filter(lambda p: p.requires_grad, netG.parameters()), lr=opt.learning_rate, amsgrad=True)
 
     lr = opt.learning_rate
     print('Using Network: ', netG.name)
