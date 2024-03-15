@@ -11,8 +11,9 @@ class BaseOptions():
         g_data = parser.add_argument_group('Data')
         g_data.add_argument('--dataroot', type=str, default='./data',
                             help='path to images (data folder)')
-
+        g_data.add_argument('--RGB', default=False, type=bool, help='train on RGB-images')
         g_data.add_argument('--loadSize', type=int, default=512, help='load size of input image')
+
 
         # Experiment related
         g_exp = parser.add_argument_group('Experiment')
@@ -89,11 +90,11 @@ class BaseOptions():
                              help='using tanh after last conv of image_filter network')
 
         ''' NEW: Added loss weights for PINN'''
-        g_model.add_argument('--weight_u', default=50, type=float, help='weight of u velocity data loss')
-        g_model.add_argument('--weight_v', default=50, type=float, help='weight of v velocity data loss')
-        g_model.add_argument('--weight_w', default=50, type=float, help='weight of w velocity data loss')
-        g_model.add_argument('--weight_p', default=150, type=float, help='weight of pressure data loss')
-        g_model.add_argument('--weight_conti', default=100000 , type=float, help='weight of continuity pde loss')
+        g_model.add_argument('--weight_u', default=100, type=float, help='weight of u velocity data loss')
+        g_model.add_argument('--weight_v', default=100, type=float, help='weight of v velocity data loss')
+        g_model.add_argument('--weight_w', default=100, type=float, help='weight of w velocity data loss')
+        g_model.add_argument('--weight_p', default=100, type=float, help='weight of pressure data loss')
+        g_model.add_argument('--weight_conti', default=10000 , type=float, help='weight of continuity pde loss')
         g_model.add_argument('--weight_phase', default=10000, type=float, help='weight of phase advection pde loss')
         g_model.add_argument('--weight_mom_x', default=10000, type=float, help='weight of x momentum pde loss')
         g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')

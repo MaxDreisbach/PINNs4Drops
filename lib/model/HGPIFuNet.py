@@ -245,9 +245,10 @@ class HGPIFuNet(BasePIFuNet):
         xy = xyz[:, :2, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
 
-        '''non-dimensionalize coordinates'''
+        '''non-dimensionalize coordinates
+        Flip y-axis - required as it was flipped in TrainDataset'''
         x_non_dim = xyz[:, :1, :] / self.L_ref
-        y_non_dim = xyz[:, 1:2, :] / self.L_ref
+        y_non_dim = -xyz[:, 1:2, :] / self.L_ref
         z_non_dim = xyz[:, 2:3, :] / self.L_ref
 
         '''Normalize data to [0,1] by min-max-normalization'''

@@ -8,12 +8,16 @@ import os
 U_0 = 0.62  # impact velocity
 D_0 = 2.1 / 10 ** 3  # Droplet diameter
 rp = 256 / 93.809 / 10 ** 3  # synthetic image reproduction scale [image domain - PINN domain]
-sigma = 0.071  # surface tension
+sigma = 0.0728  # surface tension
 rho_1 = 998.2  # density of inside medium (water)
-rho_2 = 1.204  # density of outside medium (air)
-mu_1 = 1.0016 / 10 ** 3  # viscosity of inside medium (water)
-mu_2 = 1.825 / 10 ** 5  # viscosity of outside medium (air)
+rho_2 = 1.2  # density of outside medium (air)
+mu_1 = 1.005 / 10 ** 3  # viscosity of inside medium (water)
+mu_2 = 1.55 / 10 ** 5  # viscosity of outside medium (air)
 g = 9.81  # gravity
+
+# numerical parameters Cahn-Hilliard
+epsilon = 22 / 10 ** 6  # capillary width
+M_0 = 4.84 / 10 ** 10  # mobility
 
 # Simulation domain
 xmin = - 0.00201 * 50000
@@ -54,6 +58,8 @@ dictionary = {
     "mu_1": mu_1,
     "mu_2": mu_2,
     "g": g,
+    "epsilon": epsilon,
+    "M_0": M_0,
     "x_min": xmin,
     "x_max": xmax,
     "y_min": ymin,

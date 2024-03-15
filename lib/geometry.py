@@ -14,13 +14,9 @@ def index(feat, uv):
     '''
     uv = uv.transpose(1, 2)  # [B, N, 2]
     uv = uv.unsqueeze(2)  # [B, N, 1, 2]
-    ''' y-axis needs to be flipped so that top left corner is [-1, -1] instead of [-1 1]'''
-    u = uv[:, :, :, 0]
-    v = -uv[:, :, :, 1]
-    uv_flipped = torch.stack((u, v), dim=3)
     # NOTE: for newer PyTorch, it seems that training results are degraded due to implementation diff in F.grid_sample
     # for old versions, simply remove the aligned_corners argument.
-    samples = torch.nn.functional.grid_sample(feat, uv_flipped, align_corners=True)  # [B, C, N, 1]
+    samples = torch.nn.functional.grid_sample(feat, uv, align_corners=True)  # [B, C, N, 1]
     return samples[:, :, :, 0]  # [B, C, N]
 
 
@@ -73,7 +69,8 @@ def project_velocity_vector_field(labels_u, labels_w, calibrations):
     proj_labels_w: [BxN] Tensor of projected velocity labels
     '''
     rot = calibrations[:, :3, :3] # [B, 3, 3]
-    rot = rot / rot[:, 1, 1]
+    # obtain rotation matrix by division though scale factor
+    rot = rot / (-rot[:, 1, 1])
     labels_v = torch.zeros_like(labels_u)
     labels = torch.stack((labels_u, labels_v, labels_w), dim=1) # [B, 3, N]
     #print('rotation matrix: ', rot)
