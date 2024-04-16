@@ -216,8 +216,6 @@ class HGPIFuNet_CH(BasePIFuNet):
         '''
 
         if labels is not None:
-            # using de_norm() to transform alpha field labels [0,1] to C labels [-1,1]
-            labels = de_norm(labels, -1.0, 1.0)
             self.labels = labels
 
         if labels_u is not None and labels_v is not None and labels_w is not None:
@@ -410,6 +408,8 @@ class HGPIFuNet_CH(BasePIFuNet):
         p = self.pred[0, 4, :]
 
         # get dimensional quantities
+        # using de_norm() to transform alpha field prediction [0,1] to C prediction [-1,1]
+        C = de_norm(C, -1.0, 1.0)
         u = de_norm(u, self.umin, self.umax)
         v = de_norm(v, self.vmin, self.vmax)
         w = de_norm(w, self.wmin, self.wmax)
@@ -477,16 +477,22 @@ class HGPIFuNet_CH(BasePIFuNet):
         lambda_CH = (3 * np.sqrt(2) / 4) * self.sigma * self.epsilon
         # chemical potential
         phi = (lambda_CH / self.epsilon**2) * C * (C**2 - 1) - lambda_CH * laplacian_C
+        #print('phi: ', torch.mean(phi).item())
 
         phi_xx = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.x, n=2))
         phi_yy = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.y, n=2))
         phi_zz = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.z, n=2))
+        #print('phi_zz: ', torch.mean(phi_zz).item())
+        #print('phi_yy: ', torch.mean(phi_yy).item())
         laplacian_phi = phi_xx + phi_yy + phi_zz
 
         # surface tension (sigma already contained in phi -> division)
         f_sigma_x = (one_We / self.sigma) * phi * C_x
         f_sigma_y = (one_We / self.sigma) * phi * C_y
         f_sigma_z = (one_We / self.sigma) * phi * C_z
+        #print('f_sigma_x: ', torch.mean(f_sigma_x).item())
+        #print('f_sigma_y: ', torch.mean(f_sigma_y).item())
+        #print('f_sigma_z: ', torch.mean(f_sigma_z).item())
 
         '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 

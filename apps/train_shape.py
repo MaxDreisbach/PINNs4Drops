@@ -125,7 +125,7 @@ def train(opt):
                 labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
                 get_PINN_loss=True)
 
-            # apply weighting to loss terms
+            # apply global loss weights to each loss term
             loss_data_u = opt.weight_u * loss_data_u
             loss_data_v = opt.weight_v * loss_data_v
             loss_data_w = opt.weight_w * loss_data_w
@@ -136,18 +136,53 @@ def train(opt):
             loss_momentum_y = opt.weight_mom_y * loss_momentum_y
             loss_momentum_z = opt.weight_mom_z * loss_momentum_z
 
-            # turn on PDE and u,v,w,p losses after initializing network only with alpha field for a few iterations
-            # this is done because the other losses overweight the alpha loss in early training otherwise
-            if train_idx < 1000:
+
+            ''' learning rate annealing for u,v,w,p data loss terms
+            # this is done because the other losses overweight the alpha loss in early training otherwise'''
+            if train_idx < 1000 and epoch==0:
                 loss_data_u = loss_data_u * (train_idx / 1000)
                 loss_data_v = loss_data_w * (train_idx / 1000)
                 loss_data_w = loss_data_w * (train_idx / 1000)
                 loss_data_p = loss_data_p * (train_idx / 1000)
-                loss_conti = loss_conti * (train_idx / 1000)
-                loss_phase_conv = loss_phase_conv * (train_idx / 1000)
-                loss_momentum_x = loss_momentum_x * (train_idx / 1000)
-                loss_momentum_y = loss_momentum_y * (train_idx / 1000)
-                loss_momentum_z = loss_momentum_z * (train_idx / 1000)
+
+            ''' turn on PDE losses after initializing network only with alpha field for a few iterations
+            calculate exponentially weighted moving average of alpha loss and 
+            active PDE losses after alpha loss has dropped below threshold thres_alpha'''
+            thres_alpha = 0.03
+            beta = 0.9
+
+            if train_idx == 0 and epoch == 0:
+                l_alpha_EWMA = 0.25
+                PDE_LOSS = False
+                
+            if train_idx == 0 and epoch==opt.resume_epoch:
+                l_alpha_EWMA = 0.0300001
+                PDE_LOSS = False
+
+            l_alpha_EWMA = beta * l_alpha_EWMA + (1-beta) * loss_data_alpha
+
+            if l_alpha_EWMA <= thres_alpha and PDE_LOSS == False:
+                it_start_pde_loss = train_idx
+                PDE_LOSS = True
+
+            if PDE_LOSS == True:
+                it_pde_anneal = train_idx - it_start_pde_loss
+                ''' learning rate annealing for pde loss terms'''
+                if it_pde_anneal < 5000:
+                    loss_conti = loss_conti * (it_pde_anneal / 5000)
+                    loss_phase_conv = loss_phase_conv * (it_pde_anneal / 5000)
+                    loss_momentum_x = loss_momentum_x * (it_pde_anneal / 5000)
+                    loss_momentum_y = loss_momentum_y * (it_pde_anneal / 5000)
+                    loss_momentum_z = loss_momentum_z * (it_pde_anneal / 5000)
+                else:
+                    '''Do nothing -> global weights for pde losses'''
+            else:
+                loss_conti = loss_conti * 0
+                loss_phase_conv = loss_phase_conv * 0
+                loss_momentum_x = loss_momentum_x * 0
+                loss_momentum_y = loss_momentum_y * 0
+                loss_momentum_z = loss_momentum_z * 0
+
 
             loss_total = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x + loss_momentum_y + loss_momentum_z
 
@@ -160,12 +195,12 @@ def train(opt):
                     iter_net_time - epoch_start_time)
 
             if train_idx % opt.freq_plot == 0:
-                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | L_t: {4:.06f} | L_a: {5:.06f} | L_u: {6:.06f} | L_v: {7:.06f} | L_w: {8:.06f} | L_p: {9:.06f} | L_c: {10:.9f} | L_ph: {11:.9f} | L_mom_x: {12:.9f} | L_mom_y: {13:.9f} | L_mom_z: {14:.9f} | LR: {15:.06f} | Sigma: {16:.02f} | dataT: {17:.05f} | netT: {18:.05f} | ETA: {19:02d}:{20:02d}\n'.format(
+                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | L_t: {4:.06f} | L_a: {5:.06f} | L_u: {6:.06f} | L_v: {7:.06f} | L_w: {8:.06f} | L_p: {9:.06f} | L_c: {10:.9f} | L_ph: {11:.9f} | L_mom_x: {12:.9f} | L_mom_y: {13:.9f} | L_mom_z: {14:.9f} | LR: {15:.06f} | alpha_EWMA: {16:.06f} | Sigma: {17:.02f} | dataT: {18:.05f} | netT: {19:.05f} | ETA: {20:02d}:{21:02d}\n'.format(
                     opt.name, epoch, train_idx, len(train_data_loader), loss_total.item(),
                     loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(),
                     loss_data_p.item(), loss_conti.item(),
                     loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item(),
-                    lr, opt.sigma, iter_data_time - iter_start_time, iter_net_time - iter_data_time, int(eta // 60),
+                    lr,l_alpha_EWMA.item(), opt.sigma, iter_data_time - iter_start_time, iter_net_time - iter_data_time, int(eta // 60),
                     int(eta - 60 * (eta // 60)))
                 print(loss_log_s)
                 with open(loss_log, 'a') as outfile:

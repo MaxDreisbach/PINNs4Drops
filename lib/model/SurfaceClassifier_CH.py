@@ -12,7 +12,7 @@ class SurfaceClassifier(nn.Module):
         self.no_residual = no_residual
         filter_channels = filter_channels
         self.last_op = last_op
-        print('Using tanh output for C in Cahn-Hilliard')
+        print('Using sigmoid output for alpha field -> C in Cahn-Hilliard calculated in HGPIFuNet_CH')
 
         if self.no_residual:
             for l in range(0, len(filter_channels) - 1):
@@ -84,8 +84,10 @@ class SurfaceClassifier(nn.Module):
             Different activation functions for each output variable -> alpha -> tanh, (u,v,p) - None, p ->exponential
             (see Buhendwa et al. (2021) - https://doi.org/10.1016/j.mlwa.2021.100029)
             '''
-            y = torch.cat((torch.tanh(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
-            #print('MLP output: ', y)
+            #y = torch.cat((torch.tanh(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
+            y = torch.cat(
+                (nn.Sigmoid()(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
+            # print('MLP output: ', y)
             #print('MLP output shape: ', y.size())
             #print('occupancy field mean: ', torch.mean(y[:, :1, :]).item(), 'max: ', torch.max(y[:, :1, :]).item(),
             #      'min: ', torch.min(y[:, :1, :]).item())
