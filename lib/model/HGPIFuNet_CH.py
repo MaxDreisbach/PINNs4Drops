@@ -130,8 +130,10 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.g = flow_case["g"]  # gravity
         self.y_ground = flow_case["y_ground"]  # 60um from y0+eps#-10.75 + eps# in (256,256,256) image space
 
-        self.epsilon = flow_case["epsilon"] # capillary width
-        self.M_0 = flow_case["M_0"] # mobility
+        #self.epsilon = flow_case["epsilon"] # capillary width
+        #self.M_0 = flow_case["M_0"] # mobility
+        self.epsilon = 0.01  # following Qiu (2022) - https://doi.org/10.1063/5.0091063
+        self.M_0 = (self.epsilon) ** 2
         print('epsilon: ', self.epsilon)
         print('M_0: ', self.M_0)
 
@@ -149,7 +151,8 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.pmin = flow_case["p_norm_min"]
         self.pmax = flow_case["p_norm_max"]
 
-        self.lr = 0.4 # learning rate for RBA Lagrange multipliers
+        self.RBA_lr = 0.4 # learning rate for RBA Lagrange multipliers
+        self.RBA_b = 0.8
 
         init_net(self)
 
@@ -305,7 +308,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
     def get_RBA_residual(self,  residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
-        lambda_k = 0.8 + self.lr * torch.abs(residuals) / res_max.item()
+        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / res_max.item()
         # print('Residuals maximum: ', res_max.item())
         #print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
         #print('Lagrange multipliers: ', lambda_k)
@@ -325,7 +328,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         error /= len(self.intermediate_preds_list)
 
         # devide error by 4 to be consistent with global loss weights of VOF
-        return error / 4
+        return error
 
 
     def get_velocity_loss(self, points):
@@ -348,15 +351,16 @@ class HGPIFuNet_CH(BasePIFuNet):
         return error_u, error_v, error_w
 
 
-    def get_pressure_loss(self):
+    def get_pressure_loss(self, points):
         '''
         Calculates MSE-loss of pressure data sampling points
         '''
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
+        ground_mask = self.get_solid_domain_mask(points)
         pred_p = self.pred[:, 4, :self.n_vel_pres_data]
-        error_p = self.error_term(pred_p, self.labels_p)
+        error_p = self.error_term(pred_p * ground_mask, self.labels_p * ground_mask)
 
         return error_p
 
@@ -513,6 +517,18 @@ class HGPIFuNet_CH(BasePIFuNet):
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (
                                       u_z + w_x) - f_sigma_z
 
+        ''' Debug momentum in z'''
+        #t_t = rho_M / self.rho_ref * w_t
+        #t_c = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z)
+        #t_p = p_z
+        #t_d = one_Re * (w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (u_z + w_x)
+        #t_s = f_sigma_z
+
+        #print('temporal term: ', torch.min(t_t).item(), ' max: ', torch.max(t_t).item(), ' mean: ',torch.mean(t_t).item())
+        #print('convective term: ', torch.min(t_c).item(), ' max: ', torch.max(t_c).item(), ' mean: ',torch.mean(t_c).item())
+        #print('pressure term: ', torch.min(t_p).item(), ' max: ', torch.max(t_p).item(), ' mean: ',torch.mean(t_p).item())
+        #print('diffusive term: ',  torch.min(t_d).item(), ' max: ', torch.max(t_d).item(), ' mean: ',torch.mean(t_d).item())
+        #print('surface tension: ', torch.min(t_s).item(), ' max: ', torch.max(t_s).item(), ' mean: ',torch.mean(t_s).item())
 
         ''' Phase field advection and continuity equation resi'''
         res_conti = u_x + v_y + w_z
@@ -572,7 +588,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         # get the data loss for alpha, (u,w,w) velocity components and pressure
         loss_data_alpha = self.get_error()
         loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
-        loss_data_p = self.get_pressure_loss()
+        loss_data_p = self.get_pressure_loss(points=points)
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:

@@ -66,8 +66,8 @@ def train(opt):
     with torch.no_grad():
         set_eval()
         print('calc error (validation) for steps ...')
-        plot_timesteps = [0, 5, 10, 15, 50, 100]
-        #plot_timesteps = [10, 15]
+        #plot_timesteps = [0, 5, 10, 15, 50, 97, 103, 140]
+        plot_timesteps = [97, 103]
 
         dataset = []
         for idx in plot_timesteps:
@@ -75,7 +75,9 @@ def train(opt):
             print(data['name'])
             dataset.append(data)
 
-        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), ds='test', plot_results=True)
+        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='x', ds='test', plot_results=True)
+        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='z', ds='test',
+                                 plot_results=True)
 
 
         print('calc error (train) ...')

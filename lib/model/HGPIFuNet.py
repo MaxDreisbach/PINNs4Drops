@@ -144,7 +144,8 @@ class HGPIFuNet(BasePIFuNet):
         self.pmin = flow_case["p_norm_min"]
         self.pmax = flow_case["p_norm_max"]
 
-        self.lr = 0.4 # learning rate for RBA Lagrange multipliers
+        self.RBA_lr = 0.4  # learning rate for RBA Lagrange multipliers
+        self.RBA_b = 0.8
 
         init_net(self)
 
@@ -259,6 +260,8 @@ class HGPIFuNet(BasePIFuNet):
         self.y_feat.requires_grad = True
         self.z_feat.requires_grad = True
 
+        #plot_data_sample(x_non_dim, y_non_dim, z_non_dim, self.labels_v, 0.0, 1.0)
+
         if self.opt.skip_hourglass:
             tmpx_local_feature = self.index(self.tmpx, xy)
 
@@ -301,7 +304,7 @@ class HGPIFuNet(BasePIFuNet):
 
     def get_RBA_residual(self,  residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
-        lambda_k = 0.8 + self.lr * torch.abs(residuals) / res_max.item()
+        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / res_max.item()
         # print('Residuals maximum: ', res_max.item())
         #print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
         #print('Lagrange multipliers: ', lambda_k)
@@ -341,15 +344,16 @@ class HGPIFuNet(BasePIFuNet):
 
         return error_u, error_v, error_w
 
-    def get_pressure_loss(self):
+    def get_pressure_loss(self, points):
         '''
         Calculates MSE-loss of pressure data sampling points
         '''
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
+        ground_mask = self.get_solid_domain_mask(points)
         pred_p = self.pred[:, 4, :self.n_vel_pres_data]
-        error_p = self.error_term(pred_p, self.labels_p)
+        error_p = self.error_term(pred_p * ground_mask, self.labels_p * ground_mask)
 
         return error_p
 
@@ -399,11 +403,12 @@ class HGPIFuNet(BasePIFuNet):
         w = self.pred[0, 3, :]
         p = self.pred[0, 4, :]
 
-        # get dimensional quantities
+        # get de-normed dimensionless quantities
         u = de_norm(u, self.umin, self.umax)
         v = de_norm(v, self.vmin, self.vmax)
         w = de_norm(w, self.wmin, self.wmax)
         p = de_norm(p, self.pmin, self.pmax)
+        #print('v field mean: ', v.mean().item(), 'max: ', v.max().item(), 'min: ', v.min().item())
         #print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
         #print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
 
@@ -487,7 +492,6 @@ class HGPIFuNet(BasePIFuNet):
                 u_xx + u_yy + u_zz) - 2 * one_Re_x * u_x - one_Re_y * (u_y + v_x) - one_Re_z * (
                                       u_z + w_x) - f_sigma_x
 
-        # check sign of gravity term
         res_momentum_y = rho_M / self.rho_ref * (v_t + u * v_x + v * v_y + w * v_z) + p_y - one_Re * (
                 v_xx + v_yy + v_zz) - 2 * one_Re_y * u_y - one_Re_x * (u_y + v_x) - one_Re_z * (
                                   v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
@@ -495,6 +499,19 @@ class HGPIFuNet(BasePIFuNet):
         res_momentum_z = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z) + p_z - one_Re * (
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (
                                       u_z + w_x) - f_sigma_z
+
+        ''' Debug momentum in x'''
+        #t_t = rho_M / self.rho_ref * u_t
+        #t_c = rho_M / self.rho_ref * (u * u_x + v * u_y + w * u_z)
+        #t_p = p_x
+        #t_d = one_Re * (u_xx + u_yy + u_zz) + 2 * one_Re_x * u_x + one_Re_y * (u_y + v_x) + one_Re_z * (u_z + w_x)
+        #t_s = f_sigma_x
+
+        #print('temporal term: ', torch.min(t_t).item(), ' max: ', torch.max(t_t).item(), ' mean: ',torch.mean(t_t).item())
+        #print('convective term: ', torch.min(t_c).item(), ' max: ', torch.max(t_c).item(), ' mean: ',torch.mean(t_c).item())
+        #print('pressure term: ', torch.min(t_p).item(), ' max: ', torch.max(t_p).item(), ' mean: ',torch.mean(t_p).item())
+        #print('diffusive term: ',  torch.min(t_d).item(), ' max: ', torch.max(t_d).item(), ' mean: ',torch.mean(t_d).item())
+        #print('surface tension: ', torch.min(t_s).item(), ' max: ', torch.max(t_s).item(), ' mean: ',torch.mean(t_s).item())
 
 
         ''' Phase field advection and continuity equation resi'''
@@ -552,7 +569,7 @@ class HGPIFuNet(BasePIFuNet):
         # get the data loss for alpha, (u,w,w) velocity components and pressure
         loss_data_alpha = self.get_error()
         loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
-        loss_data_p = self.get_pressure_loss()
+        loss_data_p = self.get_pressure_loss(points=points)
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:

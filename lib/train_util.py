@@ -7,7 +7,8 @@ from .plotting import *
 import cv2
 from PIL import Image
 from tqdm import tqdm
-import random
+import os
+import json
 import matplotlib.pyplot as plt
 
 
@@ -50,6 +51,16 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True, gen_vel_pres=Fals
     calib_tensor = data['calib'].to(device=cuda)
     time_tensor = data['time_step'].to(device=cuda)
 
+    #get non-dimensional time
+    # Read fluid properties and simulation domain
+    with open(os.path.join(opt.dataroot, "flow_case.json"), "r") as f:
+        flow_case = json.load(f)
+
+    # non-dimensionalize the label data
+    U_ref = flow_case["U_0"]  # impact velocity
+    L_ref = flow_case["rp"]  # image reproduction scale -> domain size
+    timestep_dimless = time_tensor / (L_ref / U_ref)
+
     net.filter(image_tensor)
 
     b_min = data['b_min']
@@ -64,7 +75,7 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True, gen_vel_pres=Fals
     Image.fromarray(np.uint8(save_img[:,:,::-1])).save(save_img_path)
 
     verts, faces, coords, sdf, u, v, w, p, _, _ = reconstruction(
-        net, cuda, calib_tensor, opt.resolution, b_min, b_max, use_octree=use_octree, time_step=time_tensor)
+        net, cuda, calib_tensor, opt.resolution, b_min, b_max, use_octree=use_octree, time_step=timestep_dimless)
 
     if gen_vel_pres:
         #plot_contour_eval(coords, opt, u, 'x', 'u', 'vel', save_path[:-4], 'test')
@@ -75,10 +86,10 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True, gen_vel_pres=Fals
         #plot_contour_eval(coords, opt, v, 'y', 'v', 'vel', save_path[:-4], 'test')
         #plot_contour_eval(coords, opt, w, 'y', 'w', 'vel', save_path[:-4], 'test')
         #plot_contour_eval(coords, opt, p, 'y', 'p', 'pres', save_path[:-4], 'test')
-        plot_contour_eval(coords, opt, u, sdf, 'z', 'u', 'vel', save_path[:-4], 'test')
-        plot_contour_eval(coords, opt, v, sdf, 'z', 'v', 'vel', save_path[:-4], 'test')
-        plot_contour_eval(coords, opt, w, sdf, 'z', 'w', 'vel', save_path[:-4], 'test')
-        plot_contour_eval(coords, opt, p, sdf, 'z', 'p', 'pres', save_path[:-4], 'test')
+        plot_contour_eval(coords, opt, u, sdf, 'z', 'u', 'vel', save_path[:-4])
+        plot_contour_eval(coords, opt, v, sdf, 'z', 'v', 'vel', save_path[:-4])
+        plot_contour_eval(coords, opt, w, sdf, 'z', 'w', 'vel', save_path[:-4])
+        plot_contour_eval(coords, opt, p, sdf, 'z', 'p', 'pres', save_path[:-4])
         #gen_vtk_prediction(coords, u, 'u', save_path[:-4])
         #gen_vtk_prediction(coords, v, 'v', save_path[:-4])
         #gen_vtk_prediction(coords, w, 'w', save_path[:-4])
@@ -167,7 +178,7 @@ def compute_acc(pred, gt, thresh=0.5):
         return true_pos / union, true_pos / vol_pred, true_pos / vol_gt
 
 
-def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False):
+def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plot_results=False):
     if num_tests > len(dataset):
         num_tests = len(dataset)
     with torch.no_grad():
@@ -198,33 +209,32 @@ def calc_error(opt, net, cuda, dataset, num_tests, ds='test', plot_results=False
                 labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w,
                                                                              calib_tensor)
                 # plot compound prediction (pressure contours, alpha contour line, velocity vector field)
-                plot_compound(opt, sample_tensor, res_PINN, label_tensor[0, 0, :], labels_u_proj[0, :], label_tensor_v[0, :], label_tensor_p[0, :], 'z', 'compound',
-                                     'pres', name, ds)
+                #plot_compound(opt, sample_tensor, res_PINN, label_tensor[0, 0, :], labels_u_proj[0, :], label_tensor_v[0, :], label_tensor_w[0, :], label_tensor_p[0, :], slice_dim, 'compound',
+                #                     'pres', name, ds)
 
                 # plot error in alpha field
-                slice_dim = 'z'
-                plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], slice_dim, 'alpha', 'alpha', name, ds)
+                #plot_contour(opt, sample_tensor, res_PINN[0, 0, :], label_tensor[0, 0, :], slice_dim, 'alpha', 'alpha', name, ds)
 
                 #plot velocity errors
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], slice_dim, 'u',
-                                     'vel', name, ds)
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], slice_dim, 'v',
-                                     'vel', name, ds)
-                plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 3, :], res[0, 0, :], labels_w_proj[0, :], slice_dim, 'w',
-                                     'vel', name, ds)
+                #plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 1, :], res[0, 0, :], labels_u_proj[0, :], label_tensor[0, 0, :], slice_dim, 'u',
+                #                     'vel', name, ds)
+                #plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 2, :], res[0, 0, :], label_tensor_v[0, :], label_tensor[0, 0, :], slice_dim, 'v',
+                #                     'vel', name, ds)
+                #plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 3, :], res[0, 0, :], labels_w_proj[0, :], label_tensor[0, 0, :], slice_dim, 'w',
+                #                     'vel', name, ds)
 
                 #plot error in pressure field
-                plot_contour_w_alpha_res_gt(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor[0, 0, :], label_tensor_p[0, :], slice_dim, 'p',
-                                     'pres', name, ds)
+                #plot_contour_w_alpha(opt, sample_tensor, res_PINN[0, 4, :], res[0, 0, :], label_tensor_p[0, :], label_tensor[0, 0, :], slice_dim, 'p',
+                #                     'pres', name, ds)
 
                 # plot 3D-contours
-                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], 'alpha', name, ds)
-                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], 'u', name, ds)
-                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], 'v', name, ds)
-                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
-                # plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 0, :], 'alpha', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 1, :], 'u', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 2, :], 'v', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
+                plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
 
-            print('{0}/{1}: {6} | Loss: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name))
+            print('{0}/{1}: {6} | Loss: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f} a_MSE: {7:06f} u_MSE: {8:06f} v_MSE: {9:06f} w_MSE: {10:06f} p_MSE: {11:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name, loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(), loss_data_p.item()))
             error_arr.append(loss.item())
             error_data_arr.append(loss_data_alpha.item())
             loss_data_vel = loss_data_u + loss_data_v + loss_data_w

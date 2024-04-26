@@ -314,7 +314,7 @@ class TrainDataset(Dataset):
 
     def select_sampling_method(self, subject):
         # for testing - consider specific time step
-        # subject = '0001'
+        # subject = '1010'
         # subject = 'droplet0_1'
         '''
         returns samples and labels for (alpha,u,v,w,p) in B_MIN,B_MAX - [256,256,256] domain
@@ -324,7 +324,7 @@ class TrainDataset(Dataset):
             np.random.seed(1991)
             torch.manual_seed(1991)
 
-        # NEW: option to load meshes during runtime instead of before
+        # load meshes during runtime instead of a-priori
         if not ONLINE_MESH_LOAD:
             # print(subject)
             mesh = self.mesh_dic[subject]

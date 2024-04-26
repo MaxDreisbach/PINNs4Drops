@@ -17,6 +17,7 @@ from lib.options import BaseOptions
 from lib.mesh_util import *
 from lib.sample_util import *
 from lib.train_util import *
+from lib.loss_util import *
 from lib.data import *
 from lib.model import *
 from lib.geometry import index
@@ -87,10 +88,14 @@ def train(opt):
     with open(opt_log, 'w') as outfile:
         outfile.write(json.dumps(vars(opt), indent=2))
 
-    'NEW: log train error'
+    'log train error'
     loss_log = os.path.join(opt.checkpoints_path, opt.name, opt.name + '_train_loss.txt')
     with open(loss_log, 'w') as outfile:
         outfile.write("Training losses\n")
+    'log loss weights'
+    weight_log = os.path.join(opt.checkpoints_path, opt.name, opt.name + '_loss_weights.txt')
+    with open(weight_log, 'w') as outfile:
+        outfile.write("Loss weights\n")
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch, 0)
@@ -125,67 +130,36 @@ def train(opt):
                 labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
                 get_PINN_loss=True)
 
+
             # apply global loss weights to each loss term
-            loss_data_u = opt.weight_u * loss_data_u
-            loss_data_v = opt.weight_v * loss_data_v
-            loss_data_w = opt.weight_w * loss_data_w
-            loss_data_p = opt.weight_p * loss_data_p
-            loss_conti = opt.weight_conti * loss_conti
-            loss_phase_conv = opt.weight_phase * loss_phase_conv
-            loss_momentum_x = opt.weight_mom_x * loss_momentum_x
-            loss_momentum_y = opt.weight_mom_y * loss_momentum_y
-            loss_momentum_z = opt.weight_mom_z * loss_momentum_z
+            losses = assign_global_weights(loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, opt)
+
+            # learning rate onramp for u,v,w,p data loss terms
+            # this is done because the other losses overweight the alpha loss in early training otherwise
+            if epoch == 0:
+                losses = get_data_loss_onramp(losses, train_idx, epoch, duration=1000)
+            losses = get_pde_loss_onramp(losses, train_idx, epoch, duration=1000)
 
 
-            ''' learning rate annealing for u,v,w,p data loss terms
-            # this is done because the other losses overweight the alpha loss in early training otherwise'''
-            if train_idx < 1000 and epoch==0:
-                loss_data_u = loss_data_u * (train_idx / 1000)
-                loss_data_v = loss_data_w * (train_idx / 1000)
-                loss_data_w = loss_data_w * (train_idx / 1000)
-                loss_data_p = loss_data_p * (train_idx / 1000)
+            ''' Calculate loss weights with SoftAdapt on EWMA of losses 
+            refresh every 100 iterations'''
+            if train_idx < 100 and epoch == 0 or epoch == opt.resume_epoch:
+                losses_EWMA = losses
+                losses_EWMA_prev = losses
+                loss_weights = torch.ones_like(losses) * 0.1
 
-            ''' turn on PDE losses after initializing network only with alpha field for a few iterations
-            calculate exponentially weighted moving average of alpha loss and 
-            active PDE losses after alpha loss has dropped below threshold thres_alpha'''
-            thres_alpha = 0.03
-            beta = 0.9
+            losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
 
-            if train_idx == 0 and epoch == 0:
-                l_alpha_EWMA = 0.25
-                PDE_LOSS = False
-                
-            if train_idx == 0 and epoch==opt.resume_epoch:
-                l_alpha_EWMA = 0.0300001
-                PDE_LOSS = False
+            if train_idx % 100 and train_idx >= 1000:
+                loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
+                losses_EWMA_prev = losses_EWMA
 
-            l_alpha_EWMA = beta * l_alpha_EWMA + (1-beta) * loss_data_alpha
+            losses = loss_weights * losses
 
-            if l_alpha_EWMA <= thres_alpha and PDE_LOSS == False:
-                it_start_pde_loss = train_idx
-                PDE_LOSS = True
+            #print('assigned SoftAdapt: ', losses)
+            #print('SoftAdapt weights: ', loss_weights)
 
-            if PDE_LOSS == True:
-                it_pde_anneal = train_idx - it_start_pde_loss
-                ''' learning rate annealing for pde loss terms'''
-                if it_pde_anneal < 5000:
-                    loss_conti = loss_conti * (it_pde_anneal / 5000)
-                    loss_phase_conv = loss_phase_conv * (it_pde_anneal / 5000)
-                    loss_momentum_x = loss_momentum_x * (it_pde_anneal / 5000)
-                    loss_momentum_y = loss_momentum_y * (it_pde_anneal / 5000)
-                    loss_momentum_z = loss_momentum_z * (it_pde_anneal / 5000)
-                else:
-                    '''Do nothing -> global weights for pde losses'''
-            else:
-                loss_conti = loss_conti * 0
-                loss_phase_conv = loss_phase_conv * 0
-                loss_momentum_x = loss_momentum_x * 0
-                loss_momentum_y = loss_momentum_y * 0
-                loss_momentum_z = loss_momentum_z * 0
-
-
-            loss_total = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x + loss_momentum_y + loss_momentum_z
-
+            loss_total = torch.sum(losses)
             optimizerG.zero_grad()
             loss_total.backward()
             optimizerG.step()
@@ -200,11 +174,16 @@ def train(opt):
                     loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(),
                     loss_data_p.item(), loss_conti.item(),
                     loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item(),
-                    lr,l_alpha_EWMA.item(), opt.sigma, iter_data_time - iter_start_time, iter_net_time - iter_data_time, int(eta // 60),
+                    lr, losses_EWMA[:1].item(), opt.sigma, iter_data_time - iter_start_time, iter_net_time - iter_data_time, int(eta // 60),
                     int(eta - 60 * (eta // 60)))
                 print(loss_log_s)
                 with open(loss_log, 'a') as outfile:
                     outfile.write(loss_log_s)
+
+                weight_log_s = 'w_a: {0:.06f} | w_u: {1:.06f}| w_v: {2:.06f} | w_w: {3:.06f} | w_p: {4:.06f} | w_cont: {5:.06f} | w_phase: {6:.06f} | w_nse_x: {7:.06f} | w_nse_y: {8:.9f} | w_nse_z: {9:.9f}\n'.format(
+                    loss_weights[0].item(), loss_weights[1].item(), loss_weights[2].item(), loss_weights[3].item(), loss_weights[4].item(), loss_weights[5].item(), loss_weights[6].item(), loss_weights[7].item(), loss_weights[8].item(), loss_weights[9].item(), )
+                with open(weight_log, 'a') as outfile:
+                    outfile.write(weight_log_s)
 
             if train_idx % opt.freq_save == 0 and train_idx != 0:
                 torch.save(netG.state_dict(), '%s/%s/netG_latest' % (opt.checkpoints_path, opt.name))

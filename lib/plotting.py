@@ -5,94 +5,14 @@ from scipy.interpolate import interpn
 from scipy.interpolate import griddata
 import pyvista
 
-def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name, dataset_type):
+def plot_contour_w_alpha(opt, samples, preds, alpha, labels, labels_alpha, plane_dim, name, type, sample_name, dataset_type):
     sample_x = samples[0, 0, :].detach().cpu().numpy()
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
     sample = np.vstack((sample_x, sample_y, sample_z)).T
     #sample = samples.detach().cpu().numpy()
     label = labels.detach().cpu().numpy()
-    pred = preds.detach().cpu().numpy()
-
-    # interpolate point cloud to 2D-plane
-    grid_res = complex(0, opt.resolution)
-    if plane_dim == 'x':
-        X, Y, Z = np.mgrid[-0.01:0.01:1j, -28:228:grid_res, -128:128:grid_res]
-    if plane_dim == 'y':
-        X, Y, Z = np.mgrid[-128:128:grid_res, 7.99:8.01:1j, -128:128:grid_res]
-    if plane_dim == 'z':
-        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.01:0.01:1j]
-
-    pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
-    pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
-    pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
-
-    label_interpn = griddata(sample, label, (X,Y,Z), method='linear')
-    label_linear = griddata(sample, label, (X,Y,Z), method='nearest')
-    label_interpn[np.isnan(label_interpn)] = label_linear[np.isnan(label_interpn)]
-
-    if plane_dim == 'x':
-        var_plot = np.squeeze(pred_interpn[0, :, :])
-        gt_plot = np.squeeze(label_interpn[0, :, :])
-    if plane_dim == 'y':
-        var_plot = np.squeeze(pred_interpn[:, 0, :].T)
-        gt_plot = np.squeeze(label_interpn[:, 0, :].T)
-    if plane_dim == 'z':
-        var_plot = np.squeeze(pred_interpn[:, :, 0].T)
-        gt_plot = np.squeeze(label_interpn[:, :, 0].T)
-
-    err_plot = np.absolute(gt_plot - var_plot)
-
-    if type == 'alpha':
-        levels = np.linspace(0, 1.0, 10)
-        colormap = 'RdBu_r'
-    if type == 'vel':
-        levels = np.linspace(-1.5, 1.5, 10)
-        colormap = 'RdBu_r'
-    if type == 'pres':
-        levels = np.linspace(-0.6, 3.0, 10)
-        colormap = 'viridis'
-
-    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.25))
-    p1 = axs[0].contourf(var_plot, levels=levels, cmap=colormap)
-    p2 = axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
-    p3 = axs[2].contourf(err_plot, cmap=colormap)
-    axs[0].contourf(var_plot, levels=levels, cmap=colormap)
-    axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
-    axs[2].contourf(err_plot, cmap=colormap)
-
-    axs[0].set_ylabel('y', fontsize=16)
-    axs[0].set_xlabel('x', fontsize=16)
-    axs[1].set_xlabel('x', fontsize=16)
-    axs[2].set_xlabel('x', fontsize=16)
-
-
-    axs[0].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
-    axs[1].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
-    axs[2].tick_params(axis ='both', which ='major', labelsize = 12, pad = 10)
-
-    axs[0].set_title(r'{0}_pred'.format(name), fontsize=16, y=1, pad=20 )
-    axs[1].set_title(r'{0}_gt'.format(name), fontsize=16, y=1, pad=20)
-    axs[2].set_title(r'%s_{err}' %name, fontsize=16, y=1, pad=20)
-
-    #plt.tight_layout(w_pad=4.5)
-    axs[0].set_aspect('equal', adjustable="datalim")
-    axs[1].set_aspect('equal', adjustable="datalim")
-    axs[2].set_aspect('equal', adjustable="datalim")
-    fig.colorbar(p1, ax=axs[0], location='bottom')
-    fig.colorbar(p2, ax=axs[1], location='bottom')
-    fig.colorbar(p3, ax=axs[2], location='bottom')
-    filename = 'results/'+ dataset_type + '_' + sample_name + '_' + name + '_pred.pdf'
-    plt.savefig(filename)
-    #plt.show()
-
-def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, type, sample_name, dataset_type):
-    sample_x = samples[0, 0, :].detach().cpu().numpy()
-    sample_y = samples[0, 1, :].detach().cpu().numpy()
-    sample_z = samples[0, 2, :].detach().cpu().numpy()
-    sample = np.vstack((sample_x, sample_y, sample_z)).T
-    #sample = samples.detach().cpu().numpy()
-    label = labels.detach().cpu().numpy()
+    label_alpha = labels_alpha.detach().cpu().numpy()
     pred = preds.detach().cpu().numpy()
     alpha = alpha.detach().cpu().numpy()
 
@@ -106,30 +26,39 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, ty
         X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
 
 
-    pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
-    pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
-    pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
+    def interpolate_grid(pred, sample, X, Y, Z):
+        pred_interpn = griddata(sample, pred, (X, Y, Z), method='linear')
+        pred_linear = griddata(sample, pred, (X, Y, Z), method='nearest')
+        pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
+        return pred_interpn
 
-    label_interpn = griddata(sample, label, (X,Y,Z), method='linear')
-    label_linear = griddata(sample, label, (X,Y,Z), method='nearest')
-    label_interpn[np.isnan(label_interpn)] = label_linear[np.isnan(label_interpn)]
+    pred_interpn = interpolate_grid(pred, sample, X, Y, Z)
+    alpha_interpn = griddata(sample, alpha, (X, Y, Z), method='nearest')
+    label_interpn = interpolate_grid(label, sample, X, Y, Z)
+    label_alpha_interpn = griddata(sample, label_alpha, (X, Y, Z), method='nearest')
 
-    alpha_interpn = griddata(sample, alpha, (X, Y, Z), method='linear')
-    alpha_linear = griddata(sample, alpha, (X, Y, Z), method='nearest')
-    alpha_interpn[np.isnan(alpha_interpn)] = alpha_linear[np.isnan(alpha_interpn)]
+    # mask out prediction in solid domain
+    ground = 28
+    pred_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    alpha_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_alpha_interpn[:, :int(ground * opt.resolution / 256), :] = 0
 
     if plane_dim == 'x':
         var_plot = np.squeeze(pred_interpn[0, :, :])
         gt_plot = np.squeeze(label_interpn[0, :, :])
         alpha_plot = np.squeeze(alpha_interpn[0, :, :])
+        alpha_gt_plot = np.squeeze(label_alpha_interpn[0, :, :])
     if plane_dim == 'y':
         var_plot = np.squeeze(pred_interpn[:, 0, :].T)
         gt_plot = np.squeeze(label_interpn[:, 0, :].T)
         alpha_plot = np.squeeze(alpha_interpn[:, 0, :].T)
+        alpha_gt_plot = np.squeeze(label_alpha_interpn[:, 0, :].T)
     if plane_dim == 'z':
         var_plot = np.squeeze(pred_interpn[:, :, 0].T)
         gt_plot = np.squeeze(label_interpn[:, :, 0].T)
         alpha_plot = np.squeeze(alpha_interpn[:, :, 0].T)
+        alpha_gt_plot = np.squeeze(label_alpha_interpn[:, :, 0].T)
 
     err_plot = np.absolute(gt_plot - var_plot)
 
@@ -137,12 +66,19 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, ty
 
     if type == 'alpha':
         levels = np.linspace(0, 1.0, 100)
+        cbar_ticks = [0.0, 0.5, 1.0]
         colormap = 'RdBu_r'
     if type == 'vel':
         levels = np.linspace(-1.5, 1.5, 100)
+        cbar_ticks = [-1.5, -0.75, 0.0, 0.75, 1.5]
+        levels_err = np.linspace(0.0, 0.25, 100)
+        cbar_ticks_err = [0.0, 0.0625, 0.125, 0.1875, 0.25]
         colormap = 'RdBu_r'
     if type == 'pres':
-        levels = np.linspace(-0.4, 3.2, 100)
+        levels = np.linspace(-0.5, 1.5, 100)
+        cbar_ticks = [-0.5, 0.0, 0.5, 1.0, 1.5]
+        levels_err = np.linspace(0.0, 0.25, 100)
+        cbar_ticks_err = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25]
         colormap = 'viridis'
 
     plt.rcParams.update({
@@ -154,13 +90,13 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, ty
     fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.75))
     p1 = axs[0].contourf(x, y, var_plot, levels=levels, cmap=colormap)
     p2 = axs[1].contourf(x, y, gt_plot, levels=levels, cmap=colormap)
-    p3 = axs[2].contourf(x, y, err_plot, 100, cmap=colormap)
+    p3 = axs[2].contourf(x, y, err_plot, levels=levels_err, cmap=colormap)
 
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs[0].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
-    a2 = axs[1].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
-    a3 = axs[2].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
+    a2 = axs[1].contour(x, y, alpha_gt_plot, levels=levels_alpha, colors='k')
+    a3 = axs[2].contour(x, y, alpha_gt_plot, levels=levels_alpha, colors='k')
 
     axs[0].set_ylabel('$y$', fontsize=16)
     axs[0].set_xlabel('$x$', fontsize=16)
@@ -195,20 +131,25 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, plane_dim, name, ty
     cbar1.ax.tick_params(labelsize=20, which='major', width=1.5, length=6)
     cbar2.ax.tick_params(labelsize=20, which='major')
     cbar3.ax.tick_params(labelsize=20, which='major')
-    cbar1.ax.locator_params(nbins=5)
-    cbar2.ax.locator_params(nbins=5)
-    cbar3.ax.locator_params(nbins=5)
+    cbar1.set_ticks(cbar_ticks)
+    cbar2.set_ticks(cbar_ticks)
+    cbar3.set_ticks(cbar_ticks_err)
 
-    filename = 'results/'+ dataset_type + '_' + sample_name + '_' + name + '_pred.pdf'
+    #cbar1.ax.locator_params(nbins=5)
+    #cbar2.ax.locator_params(nbins=5)
+    #cbar3.ax.locator_params(nbins=5)
+
+    filename = 'results/' + opt.name + '/pred_fields/'  + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
     #plt.show()
 
-def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels_p, plane_dim, name, type, sample_name, dataset_type):
+
+def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels, plane_dim, name, type, sample_name, dataset_type):
     sample_x = samples[0, 0, :].detach().cpu().numpy()
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
     sample = np.vstack((sample_x, sample_y, sample_z)).T
-    label_p = labels_p.detach().cpu().numpy()
+    label_p = labels.detach().cpu().numpy()
     label_alpha = labels_alpha.detach().cpu().numpy()
     pred = preds.detach().cpu().numpy()
     alpha = alpha.detach().cpu().numpy()
@@ -222,22 +163,24 @@ def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels
     if plane_dim == 'z':
         X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
 
-    pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
-    pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
-    pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
 
-    alpha_interpn = griddata(sample, alpha, (X, Y, Z), method='linear')
-    alpha_linear = griddata(sample, alpha, (X, Y, Z), method='nearest')
-    alpha_interpn[np.isnan(alpha_interpn)] = alpha_linear[np.isnan(alpha_interpn)]
+    def interpolate_grid(pred, sample, X, Y, Z):
+        pred_interpn = griddata(sample, pred, (X, Y, Z), method='linear')
+        pred_nearest = griddata(sample, pred, (X, Y, Z), method='nearest')
+        pred_interpn[np.isnan(pred_interpn)] = pred_nearest[np.isnan(pred_interpn)]
+        return pred_interpn
 
-    label_p_interpn = griddata(sample, label_p, (X,Y,Z), method='linear')
-    label_p_linear = griddata(sample, label_p, (X,Y,Z), method='nearest')
-    label_p_interpn[np.isnan(label_p_interpn)] = label_p_linear[np.isnan(label_p_interpn)]
+    pred_interpn = interpolate_grid(pred, sample, X, Y, Z)
+    alpha_interpn = interpolate_grid(alpha, sample, X, Y, Z)
+    label_p_interpn = interpolate_grid(label_p, sample, X, Y, Z)
+    label_alpha_interpn = interpolate_grid(label_alpha, sample, X, Y, Z)
 
-    label_alpha_interpn = griddata(sample, label_alpha, (X, Y, Z), method='linear')
-    label_alpha_linear = griddata(sample, label_alpha, (X, Y, Z), method='nearest')
-    label_alpha_interpn[np.isnan(label_alpha_interpn)] = label_alpha_linear[np.isnan(label_alpha_interpn)]
-
+    # mask out prediction in solid domain
+    ground = 28
+    pred_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    alpha_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_p_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_alpha_interpn[:, :int(ground * opt.resolution / 256), :] = 0
 
 
     if plane_dim == 'x':
@@ -281,7 +224,7 @@ def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs[0].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
-    a2 = axs[1].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
+    a2 = axs[1].contour(x, y, alpha_gt_plot, levels=levels_alpha, colors='k')
 
     axs[0].set_ylabel('$y$', fontsize=16)
     axs[0].set_xlabel('$x$', fontsize=16)
@@ -311,11 +254,11 @@ def plot_contour_w_alpha_res_gt(opt, samples, preds, alpha, labels_alpha, labels
     cbar2.ax.locator_params(nbins=5)
     plt.tight_layout(w_pad=4.5)
 
-    filename = 'results/'+ dataset_type + '_' + sample_name + '_' + name + '_pred.pdf'
+    filename = 'results/'+ opt.name + '/' + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
     #plt.show()
 
-def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labels_p, plane_dim, name, type, sample_name, dataset_type):
+def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labels_w, labels_p, plane_dim, name, type, sample_name, dataset_type):
     sample_x = samples[0, 0, :].detach().cpu().numpy()
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
@@ -323,11 +266,13 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     label_alpha = labels_alpha.detach().cpu().numpy()
     label_u = labels_u.detach().cpu().numpy()
     label_v = labels_v.detach().cpu().numpy()
+    label_w = labels_w.detach().cpu().numpy()
     label_p = labels_p.detach().cpu().numpy()
     res_PINN = res_PINN.detach().cpu().numpy()
     pred_alpha = res_PINN[0, 0, :]
     pred_u = res_PINN[0, 1, :]
     pred_v = res_PINN[0, 2, :]
+    pred_w = res_PINN[0, 3, :]
     pred_p = res_PINN[0, 4, :]
 
 
@@ -342,33 +287,72 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
 
     def interpolate_grid(pred, sample, X, Y, Z):
         pred_interpn = griddata(sample, pred, (X, Y, Z), method='linear')
-        pred_linear = griddata(sample, pred, (X, Y, Z), method='nearest')
-        pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
+        pred_nearest = griddata(sample, pred, (X, Y, Z), method='nearest')
+        pred_interpn[np.isnan(pred_interpn)] = pred_nearest[np.isnan(pred_interpn)]
         return pred_interpn
 
-    alpha_interpn = interpolate_grid(pred_alpha, sample, X, Y, Z)
+    alpha_interpn = griddata(sample, pred_alpha, (X, Y, Z), method='nearest')
     u_interpn = interpolate_grid(pred_u, sample, X, Y, Z)
     v_interpn = interpolate_grid(pred_v, sample, X, Y, Z)
+    w_interpn = interpolate_grid(pred_w, sample, X, Y, Z)
     p_interpn = interpolate_grid(pred_p, sample, X, Y, Z)
-    label_alpha_interpn = interpolate_grid(label_alpha, sample, X, Y, Z)
+    label_alpha_interpn = griddata(sample, label_alpha, (X, Y, Z), method='nearest')
     label_u_interpn = interpolate_grid(label_u, sample, X, Y, Z)
     label_v_interpn = interpolate_grid(label_v, sample, X, Y, Z)
+    label_w_interpn = interpolate_grid(label_w, sample, X, Y, Z)
     label_p_interpn = interpolate_grid(label_p, sample, X, Y, Z)
 
-    # TODO: implement options for x- and y-planes
+
     # mask out prediction in solid domain
-    u_interpn[:, :int(28 * opt.resolution / 256), 0] = 0
-    v_interpn[:, :int(28 * opt.resolution / 256), 0] = 0
-    label_u_interpn[:, :int(28 * opt.resolution / 256), 0] = 0
-    label_v_interpn[:, :int(28 * opt.resolution / 256), 0] = 0
-    alpha_plot = np.squeeze(alpha_interpn[:, :, 0].T)
-    u_plot = np.squeeze(u_interpn[:, :, 0].T)
-    v_plot = np.squeeze(v_interpn[:, :, 0].T)
-    p_plot = np.squeeze(p_interpn[:, :, 0].T)
-    label_alpha_plot = np.squeeze(label_alpha_interpn[:, :, 0].T)
-    label_u_plot = np.squeeze(label_u_interpn[:, :, 0].T)
-    label_v_plot = np.squeeze(label_v_interpn[:, :, 0].T)
-    label_p_plot = np.squeeze(label_p_interpn[:, :, 0].T)
+    ground = 28
+    u_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    v_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    w_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    label_u_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    label_v_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    label_w_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+
+
+    if plane_dim == 'x':
+        X, Y, Z = np.mgrid[-0.1:0.1:1j, -28:228:grid_res, -128:128:grid_res]
+    if plane_dim == 'y':
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.9:8.1:1j, -128:128:grid_res]
+    if plane_dim == 'z':
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
+
+    if plane_dim == 'x':
+        alpha_plot = np.squeeze(alpha_interpn[0, :, :])
+        u_plot = np.squeeze(u_interpn[0, :, :])
+        v_plot = np.squeeze(v_interpn[0, :, :])
+        w_plot = np.squeeze(w_interpn[0, :, :])
+        p_plot = np.squeeze(p_interpn[0, :, :])
+        label_alpha_plot = np.squeeze(label_alpha_interpn[0, :, :])
+        label_u_plot = np.squeeze(label_u_interpn[0, :, :])
+        label_v_plot = np.squeeze(label_v_interpn[0, :, :])
+        label_w_plot = np.squeeze(label_w_interpn[0, :, :])
+        label_p_plot = np.squeeze(label_p_interpn[0, :, :])
+    if plane_dim == 'y':
+        alpha_plot = np.squeeze(alpha_interpn[:, 0, :].T)
+        u_plot = np.squeeze(u_interpn[:, 0, :].T)
+        v_plot = np.squeeze(v_interpn[:, 0, :].T)
+        w_plot = np.squeeze(w_interpn[:, 0, :].T)
+        p_plot = np.squeeze(p_interpn[:, 0, :].T)
+        label_alpha_plot = np.squeeze(label_alpha_interpn[:, 0, :].T)
+        label_u_plot = np.squeeze(label_u_interpn[:, 0, :].T)
+        label_v_plot = np.squeeze(label_v_interpn[:, 0, :].T)
+        label_w_plot = np.squeeze(label_w_interpn[:, 0, :].T)
+        label_p_plot = np.squeeze(label_p_interpn[:, 0, :].T)
+    if plane_dim == 'z':
+        alpha_plot = np.squeeze(alpha_interpn[:, :, 0].T)
+        u_plot = np.squeeze(u_interpn[:, :, 0].T)
+        v_plot = np.squeeze(v_interpn[:, :, 0].T)
+        w_plot = np.squeeze(w_interpn[:, :, 0].T)
+        p_plot = np.squeeze(p_interpn[:, :, 0].T)
+        label_alpha_plot = np.squeeze(label_alpha_interpn[:, :, 0].T)
+        label_u_plot = np.squeeze(label_u_interpn[:, :, 0].T)
+        label_v_plot = np.squeeze(label_v_interpn[:, :, 0].T)
+        label_w_plot = np.squeeze(label_w_interpn[:, :, 0].T)
+        label_p_plot = np.squeeze(label_p_interpn[:, :, 0].T)
 
 
     x, y = np.meshgrid(np.arange(opt.resolution)/opt.resolution, np.arange(opt.resolution)/opt.resolution)
@@ -390,8 +374,15 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     a2 = axs[1].contour(x, y, label_alpha_plot, levels=levels_alpha, colors='k')
 
     skip = (slice(None, None, 10), slice(None, None, 10))
-    q1 = axs[0].quiver(x[skip], y[skip], u_plot[skip], v_plot[skip], scale=7.5, scale_units='inches', color='black')
-    q2 = axs[1].quiver(x[skip], y[skip], label_u_plot[skip], label_v_plot[skip], scale=7.5, scale_units='inches', color='black')
+    if plane_dim == 'x':
+        q1 = axs[0].quiver(x[skip], y[skip], w_plot[skip], v_plot[skip], scale=7.5, scale_units='inches', color='black')
+        q2 = axs[1].quiver(x[skip], y[skip], label_w_plot[skip], label_v_plot[skip], scale=7.5, scale_units='inches', color='black')
+    if plane_dim == 'y':
+        q1 = axs[0].quiver(x[skip], y[skip], u_plot[skip], w_plot[skip], scale=7.5, scale_units='inches', color='black')
+        q2 = axs[1].quiver(x[skip], y[skip], label_u_plot[skip], label_w_plot[skip], scale=7.5, scale_units='inches', color='black')
+    if plane_dim == 'z':
+        q1 = axs[0].quiver(x[skip], y[skip], u_plot[skip], v_plot[skip], scale=7.5, scale_units='inches', color='black')
+        q2 = axs[1].quiver(x[skip], y[skip], label_u_plot[skip], label_v_plot[skip], scale=7.5, scale_units='inches', color='black')
 
     axs[0].set_ylabel('$y$', fontsize=16)
     axs[0].set_xlabel('$x$', fontsize=16)
@@ -423,7 +414,7 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     #cbar2.ax.locator_params(nbins=5)
     plt.tight_layout(w_pad=4.5)
 
-    filename = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred.pdf'
+    filename = 'results/' + opt.name + '/pred_fields/'  + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
     #plt.show()
 
@@ -541,6 +532,12 @@ def plot_velocity_field(samples, preds, labels_u, labels_v, labels_w):
 
 
 def plot_iso_surface(opt, samples, preds, name, sample_name, dataset_type):
+    # If environment variable PYVISTA_OFF_SCREEN is set to true save a png
+    # otherwise create interactive plot
+    OFF_SCREEN = False
+    if OFF_SCREEN:
+        pyvista.start_xvfb(wait=0.1)
+
     sample_x = samples[0, 0, :].detach().cpu().numpy()
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
@@ -567,20 +564,26 @@ def plot_iso_surface(opt, samples, preds, name, sample_name, dataset_type):
     camera.position = (700.0, 100.0, 700.0)
     camera.focal_point = (5.0, 20.0, 5.0)
 
-    p = pyvista.Plotter(off_screen=True)
+    if OFF_SCREEN:
+        p = pyvista.Plotter(off_screen=True)
+    else:
+        p = pyvista.Plotter()
+
     p.add_mesh(mesh.outline(), color="k")
     p.add_mesh(contours, opacity=0.25, clim=[vmin, vmax])
     p.show_grid(**labels)
     p.add_axes(**labels)
 
     p.camera = camera
-    filename = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred_3d.svg'
-    p.save_graphic(filename)
-    #p.screenshot(filename, transparent_background=True)
-    p.close()
 
-    #meshname = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred_3d.vtk'
-    #mesh.save(meshname)
+    if OFF_SCREEN:
+        filename = 'results/' + dataset_type + '_' + sample_name + '_' + name + '_pred_3d.svg'
+        p.save_graphic(filename)
+        # p.screenshot(filename, transparent_background=True)
+        p.close()
+    else:
+        p.show()
+
 
 def gen_vtk_prediction(coords, preds, name, sample_name):
     X = coords[0, :, :, :]
@@ -609,25 +612,28 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
 
     if type == 'alpha':
         levels = np.linspace(0, 1.0, 100)
+        cbar_ticks = [0.1, 0.3, 0.5, 0.7, 0.9]
         colormap = 'RdBu_r'
     if type == 'vel':
-        levels = np.linspace(-1.5, 1.5, 100)
+        levels = np.linspace(-0.7, 0.7, 100)
+        cbar_ticks = [-0.5, -0.25, 0, 0.25, 0.5]
         colormap = 'RdBu_r'
     if type == 'pres':
-        levels = np.linspace(-0.4, 3.2, 100)
+        levels = np.linspace(-50, 450, 100)
+        cbar_ticks = [0.0, 100.0, 200.0, 300.0, 400.0]
         colormap = 'viridis'
 
     plt.rcParams.update({
         "text.usetex": True,
         "font.family": "Helvetica"
     })
-    plt.rcParams['figure.constrained_layout.use'] = True
+    #plt.rcParams['figure.constrained_layout.use'] = True
 
     x, y = np.meshgrid(np.arange(opt.resolution) / opt.resolution, np.arange(opt.resolution) / opt.resolution)
 
-    fig, axs = plt.subplots(figsize=(6.5, 6.5))
-    #p1 = axs.contourf(x, y, var_plot, levels=levels, cmap=colormap)
-    p1 = axs.contourf(x, y, var_plot, cmap=colormap)
+    fig, axs = plt.subplots(figsize=(4.75, 6.5))
+    p1 = axs.contourf(x, y, var_plot, levels=levels, cmap=colormap)
+    #p1 = axs.contourf(x, y, var_plot, cmap=colormap)
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs.contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
@@ -642,11 +648,12 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
     axs.tick_params(axis='both', which='major', labelsize=20)
     axs.set_title('$%s_{pred}$' % name, fontsize=20, y=1, pad=20)
 
-    # plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
+    plt.tight_layout(w_pad=4.5)
     axs.set_aspect('equal', adjustable="datalim")
     cbar1 = fig.colorbar(p1, ax=axs, location='bottom')
     cbar1.ax.tick_params(labelsize=20, which='major', width=1.5, length=6)
-    cbar1.ax.locator_params(nbins=5)
+    cbar1.set_ticks(cbar_ticks)
+    #cbar1.ax.locator_params(nbins=5)
 
     filename = sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
@@ -675,3 +682,109 @@ def plot_data_sample(x, y, z, labels, vmin, vmax):
     ax.set_zlabel('$Z$')
     ax.set_box_aspect((1, 1, 1))
     plt.show()
+
+def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name, dataset_type):
+    sample_x = samples[0, 0, :].detach().cpu().numpy()
+    sample_y = samples[0, 1, :].detach().cpu().numpy()
+    sample_z = samples[0, 2, :].detach().cpu().numpy()
+    sample = np.vstack((sample_x, sample_y, sample_z)).T
+    #sample = samples.detach().cpu().numpy()
+    label = labels.detach().cpu().numpy()
+    pred = preds.detach().cpu().numpy()
+
+    # interpolate point cloud to 2D-plane
+    grid_res = complex(0, opt.resolution)
+    if plane_dim == 'x':
+        X, Y, Z = np.mgrid[-0.1:0.1:3j, -28:228:grid_res, -128:128:grid_res]
+    if plane_dim == 'y':
+        X, Y, Z = np.mgrid[-128:128:grid_res, 7.9:8.1:1j, -128:128:grid_res]
+    if plane_dim == 'z':
+        X, Y, Z = np.mgrid[-128:128:grid_res, -28:228:grid_res, -0.1:0.1:1j]
+
+    #pred_interpn = griddata(sample, pred, (X,Y,Z), method='linear')
+    #pred_nearest = griddata(sample, pred, (X,Y,Z), method='nearest')
+    #pred_interpn[np.isnan(pred_interpn)] = pred_nearest[np.isnan(pred_interpn)]
+    pred_interpn = griddata(sample, pred, (X,Y,Z), method='nearest')
+
+    #label_interpn = griddata(sample, label, (X,Y,Z), method='linear')
+    #label_nearest = griddata(sample, label, (X,Y,Z), method='nearest')
+    #label_interpn[np.isnan(label_interpn)] = label_nearest[np.isnan(label_interpn)]
+    label_interpn = griddata(sample, label, (X, Y, Z), method='nearest')
+
+    if plane_dim == 'x':
+        var_plot = np.squeeze(pred_interpn[0, :, :])
+        gt_plot = np.squeeze(label_interpn[0, :, :])
+    if plane_dim == 'y':
+        var_plot = np.squeeze(pred_interpn[:, 0, :].T)
+        gt_plot = np.squeeze(label_interpn[:, 0, :].T)
+    if plane_dim == 'z':
+        var_plot = np.squeeze(pred_interpn[:, :, 0].T)
+        gt_plot = np.squeeze(label_interpn[:, :, 0].T)
+
+    err_plot = np.absolute(gt_plot - var_plot)
+
+    if type == 'alpha':
+        levels = np.linspace(0, 1.0, 10)
+        colormap = 'RdBu_r'
+    if type == 'vel':
+        levels = np.linspace(-1.5, 1.5, 10)
+        colormap = 'RdBu_r'
+    if type == 'pres':
+        levels = np.linspace(-0.6, 3.0, 10)
+        colormap = 'viridis'
+
+    plt.rcParams.update({
+        "text.usetex": True,
+        "font.family": "Helvetica"
+    })
+    plt.rcParams['figure.constrained_layout.use'] = True
+
+    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.75))
+    p1 = axs[0].contourf(var_plot, levels=levels, cmap=colormap)
+    p2 = axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
+    p3 = axs[2].contourf(err_plot, cmap=colormap)
+    axs[0].contourf(var_plot, levels=levels, cmap=colormap)
+    axs[1].contourf(gt_plot, levels=levels, cmap=colormap)
+    axs[2].contourf(err_plot, cmap=colormap)
+
+    axs[0].set_ylabel('$y$', fontsize=16)
+    axs[0].set_xlabel('$x$', fontsize=16)
+    axs[1].set_xlabel('$x$', fontsize=16)
+    axs[2].set_xlabel('$x$', fontsize=16)
+
+    x = np.arange(0.0, 1.0 + 0.001, 0.2)
+    y = np.arange(0.0, 1.0 + 0.001, 0.2)
+    axs[0].set_xticks(x)
+    axs[0].set_yticks(y)
+    axs[1].set_xticks(x)
+    axs[1].set_yticks(y)
+    axs[2].set_xticks(x)
+    axs[2].set_yticks(y)
+
+
+    axs[0].tick_params(axis ='both', which ='major', labelsize = 20)
+    axs[1].tick_params(axis ='both', which ='major', labelsize = 20)
+    axs[2].tick_params(axis ='both', which ='major', labelsize = 20)
+
+    axs[0].set_title(r'$\alpha_{pred}$', fontsize=20, y=1, pad=20)
+    axs[1].set_title(r'$\alpha_{gt}$', fontsize=20, y=1, pad=20)
+    axs[2].set_title(r'$\alpha_{err}$', fontsize=20, y=1, pad=20)
+
+    #plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
+    axs[0].set_aspect('equal', adjustable="datalim")
+    axs[1].set_aspect('equal', adjustable="datalim")
+    axs[2].set_aspect('equal', adjustable="datalim")
+    cbar1 = fig.colorbar(p1, ax=axs[0], location='bottom')
+    cbar2 = fig.colorbar(p2, ax=axs[1], location='bottom')
+    cbar3 = fig.colorbar(p3, ax=axs[2], location='bottom')
+    cbar1.ax.tick_params(labelsize=20, which='major', width=1.5, length=6)
+    cbar2.ax.tick_params(labelsize=20, which='major')
+    cbar3.ax.tick_params(labelsize=20, which='major')
+    cbar1.ax.locator_params(nbins=4)
+    cbar2.ax.locator_params(nbins=4)
+    cbar3.ax.locator_params(nbins=4)
+
+    filename = 'results/' + opt.name + '/pred_fields/'  + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
+    plt.savefig(filename)
+    #plt.show()
+
