@@ -26,7 +26,13 @@ def get_loss_weights_SoftAdapt(losses, losses_prev, beta=0.1, var_lw=False):
         ratio_losses = losses / (losses_prev + eps)
         weights = nn.Softmax(dim=0)(ratio_losses - torch.max(ratio_losses))
 
-    return weights
+    # NEW: make sure that alpha field loss does not drop - either assign max(weights) or 1/10 if w_alpha < 1/10
+    w_alpha_lim = 0.1
+    if weights[0] <= w_alpha_lim:
+        #weights[0] = torch.max(weights)
+        weights[0] = w_alpha_lim
+
+    return weights * 10
 
 
 def get_EWMA(loss, prev_EWMA, iteration, epoch, opt, beta=0.9):
@@ -36,7 +42,9 @@ def get_EWMA(loss, prev_EWMA, iteration, epoch, opt, beta=0.9):
 
     loss = loss.detach().clone()
 
-    if iteration == 0 and epoch == 0 or epoch == opt.resume_epoch:
+    if iteration == 0 and epoch == 0:
+        losses_EWMA = torch.ones_like(loss)
+    elif iteration == 0 and epoch == opt.resume_epoch:
         losses_EWMA = torch.ones_like(loss)
     else:
         losses_EWMA = beta * prev_EWMA + (1 - beta) * loss

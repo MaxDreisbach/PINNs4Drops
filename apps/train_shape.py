@@ -143,14 +143,14 @@ def train(opt):
 
             ''' Calculate loss weights with SoftAdapt on EWMA of losses 
             refresh every 100 iterations'''
-            if train_idx < 100 and epoch == 0 or epoch == opt.resume_epoch:
+            if train_idx < 100 and (epoch == 0 or epoch == opt.resume_epoch):
                 losses_EWMA = losses
                 losses_EWMA_prev = losses
                 loss_weights = torch.ones_like(losses) * 0.1
 
             losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
 
-            if train_idx % 100 and train_idx >= 1000:
+            if train_idx % 1000 == 0 and train_idx >= 1000:
                 loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
                 losses_EWMA_prev = losses_EWMA
 
