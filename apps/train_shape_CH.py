@@ -222,14 +222,14 @@ def train(opt):
                 test_losses = {}
                 print('calc error (validation) ...')
                 test_errors = calc_error(opt, netG, cuda, test_dataset, 100)
-                str_err_test = 'eval val MSE_t: {0:06f} | MSE_a: {1:06f}| MSE_v: {2:06f}| MSE_p: {3:06f}| MSE_c: {' \
-                               '4:06f}| MSE_ph: {5:06f}| MSE_nse: {6:06f} | IOU: {7:06f} | prec: {8:06f} | recall: {' \
-                               '9:06f}\n'.format(*test_errors)
+                str_err_test = 'Val | MSE_a: {0:06f} | MSE_u: {1:06f} | MSE_v: {2:06f} | MSE_w: {3:06f} | MSE_p: {4:06f} | MSE_c: {' \
+                               '5:06f} | MSE_ph: {6:06f} | MSE_nse_x: {7:06f} | MSE_nse_y: {8:06f} | MSE_nse_z: {9:06f} | IOU: {10:06f} | prec: {11:06f} | recall: {' \
+                               '12:06f}\n'.format(*test_errors)
                 print(str_err_test)
                 with open(IOU_log, 'a') as outfile:
                     outfile.write(str_err_test)
-                MSE, MSE_a, MSE_v, MSE_p, MSE_c, MSE_ph, MSE_nse, IOU, prec, recall = test_errors
-                test_losses['MSE(val)'] = MSE
+                MSE_a, MSE_u, MSE_v, MSE_w, MSE_p, MSE_c, MSE_ph, MSE_nse_x, MSE_nse_y, MSE_nse_z, IOU, prec, recall = test_errors
+                test_losses['MSE(val)'] = MSE_a
                 test_losses['IOU(val)'] = IOU
                 test_losses['prec(val)'] = prec
                 test_losses['recall(val)'] = recall
@@ -238,14 +238,14 @@ def train(opt):
                 train_dataset.is_train = False
                 train_errors = calc_error(opt, netG, cuda, train_dataset, 100)
                 train_dataset.is_train = True
-                str_err_train = 'eval train MSE_t: {0:06f} | MSE_a: {1:06f}| MSE_v: {2:06f}| MSE_p: {3:06f}| MSE_c: {' \
-                                '4:06f}| MSE_ph: {5:06f}| MSE_nse: {6:06f} | IOU: {7:06f} | prec: {8:06f} | recall: {' \
-                                '9:06f}\n'.format(*train_errors)
+                str_err_train = 'Train | MSE_a: {0:06f} | MSE_u: {1:06f} | MSE_v: {2:06f} | MSE_w: {3:06f} | MSE_p: {4:06f} | MSE_c: {' \
+                                '5:06f} | MSE_ph: {6:06f} | MSE_nse_x: {7:06f} | MSE_nse_y: {8:06f} | MSE_nse_z: {9:06f} | IOU: {10:06f} | prec: {11:06f} | recall: {' \
+                                '12:06f}\n'.format(*train_errors)
                 print(str_err_train)
                 with open(IOU_log, 'a') as outfile:
                     outfile.write(str_err_train)
-                MSE, MSE_a, MSE_v, MSE_p, MSE_c, MSE_ph, MSE_nse, IOU, prec, recall = train_errors
-                test_losses['MSE(train)'] = MSE
+                MSE_a, MSE_u, MSE_v, MSE_w, MSE_p, MSE_c, MSE_ph, MSE_nse_x, MSE_nse_y, MSE_nse_z, IOU, prec, recall = train_errors
+                test_losses['MSE(train)'] = MSE_a
                 test_losses['IOU(train)'] = IOU
                 test_losses['prec(train)'] = prec
                 test_losses['recall(train)'] = recall

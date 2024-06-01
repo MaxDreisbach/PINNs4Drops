@@ -182,7 +182,7 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
     if num_tests > len(dataset):
         num_tests = len(dataset)
     with torch.no_grad():
-        error_arr, error_data_arr, error_vel_arr, error_pres_arr, error_conti_arr, error_phase_arr, error_nse_arr, IOU_arr, prec_arr, recall_arr = [], [], [], [], [], [], [], [], [], []
+        error_alpha_arr, error_u_arr, error_v_arr, error_w_arr, error_pres_arr, error_conti_arr, error_phase_arr, error_nse_x_arr, error_nse_y_arr, error_nse_z_arr, IOU_arr, prec_arr, recall_arr = [], [], [], [], [], [], [], [], [], [], [], [], []
         for idx in range(num_tests):
             data = dataset[idx * len(dataset) // num_tests]
             # retrieve the data
@@ -202,7 +202,7 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
             res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = net.forward(image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
                    labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, get_PINN_loss=False)
 
-            loss = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x +loss_momentum_z +loss_momentum_z
+            loss = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x + loss_momentum_z + loss_momentum_z
             IOU, prec, recall = compute_acc(res, label_tensor)
 
             if plot_results:
@@ -234,21 +234,22 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
                 #plot_iso_surface(opt, sample_tensor, res_PINN[0, 3, :], 'w', name, ds)
                 #plot_iso_surface(opt, sample_tensor, res_PINN[0, 4, :], 'p', name, ds)
 
-            print('{0}/{1}: {6} | Loss: {2:06f} IOU: {3:06f} prec: {4:06f} recall: {5:06f} a_MSE: {7:06f} u_MSE: {8:06f} v_MSE: {9:06f} w_MSE: {10:06f} p_MSE: {11:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name, loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(), loss_data_p.item()))
-            error_arr.append(loss.item())
-            error_data_arr.append(loss_data_alpha.item())
-            loss_data_vel = loss_data_u + loss_data_v + loss_data_w
-            error_vel_arr.append(loss_data_vel.item())
+            print('{0}/{1}: {6} | IOU: {3:06f} | a_MSE: {7:06f} | u_MSE: {8:06f} | v_MSE: {9:06f} | w_MSE: {10:06f} | p_MSE: {11:06f} | conti: {12:06f} | advection: {13:06f} | nse_x: {14:06f} | nse_y: {15:06f} | nse_z: {16:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name, loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(), loss_data_p.item(), loss_conti.item(), loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item()))
+            error_alpha_arr.append(loss_data_alpha.item())
+            error_u_arr.append(loss_data_u.item())
+            error_v_arr.append(loss_data_v.item())
+            error_w_arr.append(loss_data_w.item())
             error_pres_arr.append(loss_data_p.item())
             error_conti_arr.append(loss_conti.item())
             error_phase_arr.append(loss_phase_conv.item())
-            loss_momentum = loss_momentum_x + loss_momentum_y + loss_momentum_z
-            error_nse_arr.append(loss_momentum.item())
+            error_nse_x_arr.append(loss_momentum_x.item())
+            error_nse_y_arr.append(loss_momentum_y.item())
+            error_nse_z_arr.append(loss_momentum_z.item())
             IOU_arr.append(IOU.item())
             prec_arr.append(prec.item())
             recall_arr.append(recall.item())
     print('All samples: {0}'.format(IOU_arr))
-    return np.average(error_arr), np.average(error_data_arr), np.average(error_vel_arr), np.average(error_pres_arr), np.average(error_conti_arr), np.average(error_phase_arr), np.average(error_nse_arr), np.average(IOU_arr), np.average(prec_arr), np.average(recall_arr)
+    return np.average(error_alpha_arr), np.average(error_u_arr), np.average(error_v_arr), np.average(error_w_arr), np.average(error_pres_arr), np.average(error_conti_arr), np.average(error_phase_arr), np.average(error_nse_x_arr), np.average(error_nse_y_arr), np.average(error_nse_z_arr), np.average(IOU_arr), np.average(prec_arr), np.average(recall_arr)
 
 def calc_error_color(opt, netG, netC, cuda, dataset, num_tests):
     if num_tests > len(dataset):

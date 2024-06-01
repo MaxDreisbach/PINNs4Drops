@@ -14,21 +14,22 @@ import math
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-f', '--file_dir', type=str, default= 'DFS2023M')
-parser.add_argument('-d', '--data_folder', type=str, default='train_data_DFS2023C')
+parser.add_argument('-f', '--file_dir', type=str, default= 'DFS2024D-PINN_17')
+parser.add_argument('-d', '--data_folder', type=str, default='./train_data_DFS2024D')
 parser.add_argument('-n', '--num_files', type=int, default=1000)
 args = parser.parse_args()
 
-data_path = '../checkpoints/' + args.file_dir
-base_command = "python -m eval_IOU --gpu_id 1 --no_gen_mesh"
+data_path = './checkpoints/' + args.file_dir
+base_command = "python -m apps.eval_IOU --gpu_id 1 --no_gen_mesh"
 
 filelist = [file for file in sorted(os.listdir(data_path))]
-print(filelist)
+epochs = np.linspace(1, 8, num=8)
+print(epochs)
 
 
 commands = []
-for i,file in enumerate(filelist):
-  command = base_command + ' --batch_size ' + str(args.num_files) +' --dataroot ../' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ../checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i)
+for i,epoch in enumerate(epochs):
+  command = base_command + ' --batch_size ' + str(args.num_files) +' --dataroot ' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ./checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i) + ' --RGB True'
   print(command)
   commands.append(command)
 
