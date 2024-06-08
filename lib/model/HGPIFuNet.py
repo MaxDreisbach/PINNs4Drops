@@ -10,6 +10,7 @@ from torch.autograd import grad
 from .BasePIFuNet import BasePIFuNet
 from .SurfaceClassifier import SurfaceClassifier
 from .ConditionedSurfaceClassifier import ConditionedSurfaceClassifier
+from .SurfaceClassifier_LAAF import SurfaceClassifier_LAAF
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
@@ -97,8 +98,12 @@ class HGPIFuNet(BasePIFuNet):
                 no_residual=self.opt.no_residual,
                 last_op=nn.Sigmoid())
         else:
-            print('Using conditioned MLP instead of original MLP architecture from PIFuNet')
-            self.surface_classifier = ConditionedSurfaceClassifier()
+            print('Using layer-wise adaptive activation functions PIFuNet')
+            self.surface_classifier = SurfaceClassifier_LAAF(
+                filter_channels=self.opt.mlp_dim,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid())
 
         self.normalizer = DepthNormalizer(opt)
 
