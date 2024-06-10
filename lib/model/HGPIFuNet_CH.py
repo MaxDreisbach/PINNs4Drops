@@ -88,7 +88,6 @@ class HGPIFuNet_CH(BasePIFuNet):
                 for parameter in layer.parameters():
                     parameter.requires_grad = False
 
-
         if not opt.use_cond_MLP:
             print('Using standard MLP architecture from PIFuNet')
             self.surface_classifier = SurfaceClassifier(
@@ -130,11 +129,12 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.g = flow_case["g"]  # gravity
         self.y_ground = flow_case["y_ground"]  # 60um from y0+eps#-10.75 + eps# in (256,256,256) image space
 
-        #self.epsilon = flow_case["epsilon"] # capillary width
-        #self.M_0 = flow_case["M_0"] # mobility
-        self.epsilon = 0.01  # following Qiu (2022) - https://doi.org/10.1063/5.0091063
-        self.M_0 = (self.epsilon) ** 2
-        print('epsilon: ', self.epsilon)
+        # self.epsilon = flow_case["epsilon"] # capillary width
+        # self.M_0 = flow_case["M_0"] # mobility
+        # self.epsilon = 0.01  # following Qiu (2022) - https://doi.org/10.1063/5.0091063
+        self.epsilon = nn.Parameter(0.01 * torch.ones(1))  # learnable epsilon
+        self.M_0 = (self.epsilon.item()) ** 2
+        print('epsilon: ', self.epsilon.item())
         print('M_0: ', self.M_0)
 
         # min-max normalization boundaries
@@ -151,7 +151,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.pmin = flow_case["p_norm_min"]
         self.pmax = flow_case["p_norm_max"]
 
-        self.RBA_lr = 0.4 # learning rate for RBA Lagrange multipliers
+        self.RBA_lr = 0.4  # learning rate for RBA Lagrange multipliers
         self.RBA_b = 0.8
 
         init_net(self)
@@ -184,7 +184,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         u_dim = u * self.U_ref
         v_dim = v * self.U_ref
         w_dim = w * self.U_ref
-        p_dim = p * self.rho_ref * self.U_ref**2
+        p_dim = p * self.rho_ref * self.U_ref ** 2
 
         return torch.stack((alpha, u_dim, v_dim, w_dim, p_dim), dim=1)
 
@@ -272,7 +272,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.intermediate_preds_list = []
 
         for im_feat in self.im_feat_list:
-            #plot_im_feat(im_feat)
+            # plot_im_feat(im_feat)
             image_feature = self.index(im_feat, xy)
             self.x = self.x_feat
             self.y = self.y_feat
@@ -287,14 +287,12 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.preds = self.intermediate_preds_list[-1]
         self.pred_dimensional = self.get_dimensional_pred()
 
-
     def get_im_feat(self):
         '''
         Get the image filter
         :return: [B, C_feat, H, W] image feature after filtering
         '''
         return self.im_feat_list[-1]
-
 
     def get_solid_domain_mask(self, points):
         ground_mask = torch.zeros_like(points[:, :1, :])
@@ -305,17 +303,15 @@ class HGPIFuNet_CH(BasePIFuNet):
                 ground_mask[:, :, i] = 0
         return ground_mask
 
-
-    def get_RBA_residual(self,  residuals):
+    def get_RBA_residual(self, residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
         lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / res_max.item()
         # print('Residuals maximum: ', res_max.item())
-        #print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
-        #print('Lagrange multipliers: ', lambda_k)
-        #print('Lagrange multipliers shape: ', lambda_k.size())
+        # print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
+        # print('Lagrange multipliers: ', lambda_k)
+        # print('Lagrange multipliers shape: ', lambda_k.size())
 
         return lambda_k * residuals, lambda_k
-
 
     def get_error(self):
         '''
@@ -330,7 +326,6 @@ class HGPIFuNet_CH(BasePIFuNet):
         # devide error by 4 to be consistent with global loss weights of VOF
         return error
 
-
     def get_velocity_loss(self, points):
         '''
         Calculates MSE-loss of velocity data sampling points
@@ -338,7 +333,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
-        #Do not calculate loss for sample points below surface in solid domain and within grooves
+        # Do not calculate loss for sample points below surface in solid domain and within grooves
         # TODO: Test if masking works
         ground_mask = self.get_solid_domain_mask(points)
         pred_u = self.pred[:, 1, :self.n_vel_pres_data]
@@ -349,7 +344,6 @@ class HGPIFuNet_CH(BasePIFuNet):
         error_w = self.error_term(pred_w * ground_mask, self.labels_w * ground_mask)
 
         return error_u, error_v, error_w
-
 
     def get_pressure_loss(self, points):
         '''
@@ -363,7 +357,6 @@ class HGPIFuNet_CH(BasePIFuNet):
         error_p = self.error_term(pred_p * ground_mask, self.labels_p * ground_mask)
 
         return error_p
-
 
     def detect_faulty_derivative(self, grad, name):
         error_log = 'error_log.txt'
@@ -399,7 +392,6 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         return faulty_grad
 
-
     def get_pde_loss(self, points):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
@@ -418,8 +410,8 @@ class HGPIFuNet_CH(BasePIFuNet):
         v = de_norm(v, self.vmin, self.vmax)
         w = de_norm(w, self.wmin, self.wmax)
         p = de_norm(p, self.pmin, self.pmax)
-        #print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
-        #print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
+        # print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
+        # print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
 
         # derivatives
         C_t = self.diff_t_de_norm(nth_derivative(C, wrt=self.t, n=1))
@@ -476,66 +468,70 @@ class HGPIFuNet_CH(BasePIFuNet):
         one_We = self.sigma / (self.rho_ref * self.U_ref ** 2 * self.L_ref)  # 1/We
         one_Fr2 = self.g * self.L_ref / self.U_ref ** 2  # 1/(Fr^2)
 
-        ''' Cahn-Hilliard equation - assume C = C '''
+        ''' Cahn-Hilliard equation '''
+        # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021)
+        #self.epsilon = torch.clamp(self.epsilon, min=2.2e-05, max=0.01)
+        self.epsilon.data.clamp_(min=2.2e-05, max=0.01)
+        self.M_0 = (self.epsilon.item()) ** 2
+
         # mixing energy density
         lambda_CH = (3 * np.sqrt(2) / 4) * self.sigma * self.epsilon
         # chemical potential
-        phi = (lambda_CH / self.epsilon**2) * C * (C**2 - 1) - lambda_CH * laplacian_C
-        #print('phi: ', torch.mean(phi).item())
+        phi = (lambda_CH / self.epsilon ** 2) * C * (C ** 2 - 1) - lambda_CH * laplacian_C
+        # print('phi: ', torch.mean(phi).item())
 
         phi_xx = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.x, n=2))
         phi_yy = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.y, n=2))
         phi_zz = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.z, n=2))
-        #print('phi_zz: ', torch.mean(phi_zz).item())
-        #print('phi_yy: ', torch.mean(phi_yy).item())
+        # print('phi_zz: ', torch.mean(phi_zz).item())
+        # print('phi_yy: ', torch.mean(phi_yy).item())
         laplacian_phi = phi_xx + phi_yy + phi_zz
 
         # surface tension (sigma already contained in phi -> division)
         f_sigma_x = (one_We / self.sigma) * phi * C_x
         f_sigma_y = (one_We / self.sigma) * phi * C_y
         f_sigma_z = (one_We / self.sigma) * phi * C_z
-        #print('f_sigma_x: ', torch.mean(f_sigma_x).item())
-        #print('f_sigma_y: ', torch.mean(f_sigma_y).item())
-        #print('f_sigma_z: ', torch.mean(f_sigma_z).item())
+        # print('f_sigma_x: ', torch.mean(f_sigma_x).item())
+        # print('f_sigma_y: ', torch.mean(f_sigma_y).item())
+        # print('f_sigma_z: ', torch.mean(f_sigma_z).item())
 
         '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 
         to zero, as they yield in a term that is equal to the interface advection equation (similarly terms drop out 
         due to continuity) '''
-        
+
         # calculate residual of momentum equations
         res_momentum_x = rho_M / self.rho_ref * (u_t + u * u_x + v * u_y + w * u_z) + p_x - one_Re * (
                 u_xx + u_yy + u_zz) - 2 * one_Re_x * u_x - one_Re_y * (u_y + v_x) - one_Re_z * (
-                                      u_z + w_x) - f_sigma_x
+                                 u_z + w_x) - f_sigma_x
 
         # check sign of gravity term
         res_momentum_y = rho_M / self.rho_ref * (v_t + u * v_x + v * v_y + w * v_z) + p_y - one_Re * (
                 v_xx + v_yy + v_zz) - 2 * one_Re_y * u_y - one_Re_x * (u_y + v_x) - one_Re_z * (
-                                  v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
+                                 v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
 
         res_momentum_z = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z) + p_z - one_Re * (
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (
-                                      u_z + w_x) - f_sigma_z
+                                 u_z + w_x) - f_sigma_z
 
         ''' Debug momentum in z'''
-        #t_t = rho_M / self.rho_ref * w_t
-        #t_c = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z)
-        #t_p = p_z
-        #t_d = one_Re * (w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (u_z + w_x)
-        #t_s = f_sigma_z
+        # t_t = rho_M / self.rho_ref * w_t
+        # t_c = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z)
+        # t_p = p_z
+        # t_d = one_Re * (w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (u_z + w_x)
+        # t_s = f_sigma_z
 
-        #print('temporal term: ', torch.min(t_t).item(), ' max: ', torch.max(t_t).item(), ' mean: ',torch.mean(t_t).item())
-        #print('convective term: ', torch.min(t_c).item(), ' max: ', torch.max(t_c).item(), ' mean: ',torch.mean(t_c).item())
-        #print('pressure term: ', torch.min(t_p).item(), ' max: ', torch.max(t_p).item(), ' mean: ',torch.mean(t_p).item())
-        #print('diffusive term: ',  torch.min(t_d).item(), ' max: ', torch.max(t_d).item(), ' mean: ',torch.mean(t_d).item())
-        #print('surface tension: ', torch.min(t_s).item(), ' max: ', torch.max(t_s).item(), ' mean: ',torch.mean(t_s).item())
+        # print('temporal term: ', torch.min(t_t).item(), ' max: ', torch.max(t_t).item(), ' mean: ',torch.mean(t_t).item())
+        # print('convective term: ', torch.min(t_c).item(), ' max: ', torch.max(t_c).item(), ' mean: ',torch.mean(t_c).item())
+        # print('pressure term: ', torch.min(t_p).item(), ' max: ', torch.max(t_p).item(), ' mean: ',torch.mean(t_p).item())
+        # print('diffusive term: ',  torch.min(t_d).item(), ' max: ', torch.max(t_d).item(), ' mean: ',torch.mean(t_d).item())
+        # print('surface tension: ', torch.min(t_s).item(), ' max: ', torch.max(t_s).item(), ' mean: ',torch.mean(t_s).item())
 
         ''' Phase field advection and continuity equation resi'''
         res_conti = u_x + v_y + w_z
-        
-        #The phase field equation
+
+        # The phase field equation
         res_phase_adv = C_t + u * C_x + v * C_y + w * C_z - self.M_0 * laplacian_phi
-    
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
         ground_mask = self.get_solid_domain_mask(points)
@@ -547,7 +543,6 @@ class HGPIFuNet_CH(BasePIFuNet):
         res_phase_adv = res_phase_adv * ground_mask
         res_conti = res_conti * ground_mask
 
-
         # get RBA update with local Lagrange multipliers
         res_momentum_x, RBA_mom_x = self.get_RBA_residual(res_momentum_x)
         res_momentum_y, RBA_mom_y = self.get_RBA_residual(res_momentum_y)
@@ -556,11 +551,11 @@ class HGPIFuNet_CH(BasePIFuNet):
         res_conti, RBA_conti = self.get_RBA_residual(res_conti)
 
         # plot RBA
-        #plot_data_sample(self.x, self.y, self.z, RBA_mom_x, 0.8, 1.2)
-        #plot_data_sample(self.x, self.y, self.z, RBA_mom_y, 0.8, 1.2)
-        #plot_data_sample(self.x, self.y, self.z, RBA_mom_z, 0.8, 1.2)
-        #plot_data_sample(self.x, self.y, self.z, RBA_phase_adv, 0.8, 1.2)
-        #plot_data_sample(self.x, self.y, self.z, RBA_conti, 0.8, 1.2)
+        # plot_data_sample(self.x, self.y, self.z, RBA_mom_x, 0.8, 1.2)
+        # plot_data_sample(self.x, self.y, self.z, RBA_mom_y, 0.8, 1.2)
+        # plot_data_sample(self.x, self.y, self.z, RBA_mom_z, 0.8, 1.2)
+        # plot_data_sample(self.x, self.y, self.z, RBA_phase_adv, 0.8, 1.2)
+        # plot_data_sample(self.x, self.y, self.z, RBA_conti, 0.8, 1.2)
 
         loss_momentum_x = F.mse_loss(res_momentum_x, torch.zeros_like(res_momentum_x))
         loss_momentum_y = F.mse_loss(res_momentum_y, torch.zeros_like(res_momentum_y))
@@ -592,7 +587,8 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
-            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=points)
+            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(
+                points=points)
         else:
             loss_conti = loss_data_alpha * 0
             loss_phase_conv = loss_data_alpha * 0
@@ -600,4 +596,4 @@ class HGPIFuNet_CH(BasePIFuNet):
             loss_momentum_y = loss_data_alpha * 0
             loss_momentum_z = loss_data_alpha * 0
 
-        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w,  loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z
+        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, self.epsilon
