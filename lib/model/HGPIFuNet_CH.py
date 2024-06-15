@@ -28,17 +28,6 @@ def de_norm(data, min, max):
     return data * (max - min) + min
 
 
-# a very simple torch method to compute derivatives.
-def nth_derivative(f, wrt, n):
-    for i in range(n):
-        grads = grad(f, wrt, grad_outputs=torch.ones_like(f), create_graph=True, allow_unused=True)[0]
-        f = grads
-        if grads is None:
-            print('bad grad')
-            return torch.tensor(0.)
-    return grads
-
-
 def flat(x):
     m = x.shape[0]
     return [x[i] for i in range(m)]
@@ -156,11 +145,24 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         init_net(self)
 
+
+    def nth_derivative(self,f, wrt, n):
+        for i in range(n):
+            grads = grad(f, wrt, grad_outputs=torch.ones_like(f), create_graph=True, allow_unused=True)[0]
+            f = grads
+            if grads is None:
+                print('bad grad')
+                return torch.tensor(0.)
+        return grads[:, :, self.n_data:]
+
+
     def diff_xyz_de_norm(self, data):
         return data / (self.xmax - self.xmin)
 
+
     def diff_t_de_norm(self, data):
         return data / (self.tmax - self.tmin)
+
 
     def get_non_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
@@ -171,6 +173,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         p = de_norm(self.pred[:, 4, :], self.pmin, self.pmax)
 
         return torch.stack((alpha, u, v, w, p), dim=1)
+
 
     def get_dimensional_pred(self):
         # retrieve de-normalized data for u,v,w,p
@@ -188,6 +191,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         return torch.stack((alpha, u_dim, v_dim, w_dim, p_dim), dim=1)
 
+
     def filter(self, images):
         '''
         Filter the input images
@@ -199,6 +203,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         # If it is not in training, only produce the last im_feat
         if not self.training:
             self.im_feat_list = [self.im_feat_list[-1]]
+
 
     def query(self, points, calibs, transforms=None, labels=None, labels_u=None, labels_v=None, labels_w=None,
               labels_p=None, time_step=None):
@@ -494,9 +499,9 @@ class HGPIFuNet_CH(BasePIFuNet):
         phi = (lambda_CH / self.epsilon ** 2) * C * (C ** 2 - 1) - lambda_CH * laplacian_C
         # print('phi: ', torch.mean(phi).item())
 
-        phi_xx = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.x, n=2))
-        phi_yy = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.y, n=2))
-        phi_zz = self.diff_xyz_de_norm(nth_derivative(phi, wrt=self.z, n=2))
+        phi_xx = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.x, n=2))
+        phi_yy = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.y, n=2))
+        phi_zz = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.z, n=2))
         # print('phi_zz: ', torch.mean(phi_zz).item())
         # print('phi_yy: ', torch.mean(phi_yy).item())
         laplacian_phi = phi_xx + phi_yy + phi_zz
