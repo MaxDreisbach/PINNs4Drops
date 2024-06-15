@@ -68,7 +68,7 @@ class HGPIFuNet(BasePIFuNet):
         print(self.root)
 
         # for PINN (u,v,w,p) data loss term
-        self.n_vel_pres_data = self.opt.n_vel_pres_data
+        self.n_data = self.opt.n_data
         self.num_views = self.opt.num_views
 
         self.image_filter = HGFilter(opt)
@@ -150,7 +150,7 @@ class HGPIFuNet(BasePIFuNet):
             if grads is None:
                 print('bad grad')
                 return torch.tensor(0.)
-        return grads[:, :, self.n_vel_pres_data:]
+        return grads[:, :, self.n_data:]
 
     def diff_xyz_de_norm(self, data):
         return data / (self.xmax - self.xmin)
@@ -325,8 +325,8 @@ class HGPIFuNet(BasePIFuNet):
         error = 0
         for preds in self.intermediate_preds_list:
             # get prediction for observation points only
-            pred_a = preds[:, :, :self.n_vel_pres_data]
-            labels_a = self.labels[:, :, :self.n_vel_pres_data]
+            pred_a = preds[:, :, :self.n_data]
+            labels_a = self.labels[:, :, :self.n_data]
             error += self.error_term(pred_a, labels_a)
         error /= len(self.intermediate_preds_list)
 
@@ -337,17 +337,17 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Calculates MSE-loss of velocity data sampling points
         '''
-        if self.n_vel_pres_data >= self.pred.size(dim=2):
-            self.n_vel_pres_data = self.pred.size(dim=2)
+        if self.n_data >= self.pred.size(dim=2):
+            self.n_data = self.pred.size(dim=2)
 
         # get prediction for observation points
-        pred_u = self.pred[:, 1, :self.n_vel_pres_data]
-        pred_v = self.pred[:, 2, :self.n_vel_pres_data]
-        pred_w = self.pred[:, 3, :self.n_vel_pres_data]
+        pred_u = self.pred[:, 1, :self.n_data]
+        pred_v = self.pred[:, 2, :self.n_data]
+        pred_w = self.pred[:, 3, :self.n_data]
 
         # Do not calculate loss for sample points below surface in solid domain and within grooves
         ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_vel_pres_data]
+        mask = ground_mask[:, :, :self.n_data]
         error_u = self.error_term(pred_u * mask, self.labels_u * mask)
         error_v = self.error_term(pred_v * mask, self.labels_v * mask)
         error_w = self.error_term(pred_w * mask, self.labels_w * mask)
@@ -359,13 +359,13 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Calculates MSE-loss of pressure data sampling points
         '''
-        if self.n_vel_pres_data >= self.pred.size(dim=2):
-            self.n_vel_pres_data = self.pred.size(dim=2)
+        if self.n_data >= self.pred.size(dim=2):
+            self.n_data = self.pred.size(dim=2)
 
         # get prediction for observation points
-        pred_p = self.pred[:, 4, :self.n_vel_pres_data]
+        pred_p = self.pred[:, 4, :self.n_data]
         ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_vel_pres_data]
+        mask = ground_mask[:, :, :self.n_data]
         error_p = self.error_term(pred_p * mask, self.labels_p * mask)
 
         return error_p
@@ -411,11 +411,11 @@ class HGPIFuNet(BasePIFuNet):
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
         # get prediction for collocation points
-        alpha = self.preds[0, 0, self.n_vel_pres_data:]  # preds instead of pred to get masking of alpha
-        u = self.pred[0, 1, self.n_vel_pres_data:]
-        v = self.pred[0, 2, self.n_vel_pres_data:]
-        w = self.pred[0, 3, self.n_vel_pres_data:]
-        p = self.pred[0, 4, self.n_vel_pres_data:]
+        alpha = self.preds[0, 0, self.n_data:]  # preds instead of pred to get masking of alpha
+        u = self.pred[0, 1, self.n_data:]
+        v = self.pred[0, 2, self.n_data:]
+        w = self.pred[0, 3, self.n_data:]
+        p = self.pred[0, 4, self.n_data:]
 
         # get de-normed dimensionless quantities
         u = de_norm(u, self.umin, self.umax)
@@ -534,7 +534,7 @@ class HGPIFuNet(BasePIFuNet):
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
         ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, self.n_vel_pres_data:]
+        mask = ground_mask[:, :, self.n_data:]
         # zero_residual_points = (ground_mask == 0).sum()
         # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
         res_momentum_x = res_momentum_x * mask

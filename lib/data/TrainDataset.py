@@ -99,7 +99,7 @@ class TrainDataset(Dataset):
         self.load_size = self.opt.loadSize
 
         # for PINN (u,v,w,p) data loss term
-        self.n_vel_pres_data = self.opt.n_vel_pres_data
+        self.n_data = self.opt.n_data
 
         self.num_views = self.opt.num_views
 
@@ -406,15 +406,15 @@ class TrainDataset(Dataset):
         grid_points = (x, y, z)
 
         # Limit number of data points (u,v,w,p) to amount of sampling points
-        if self.n_vel_pres_data >= samples.size(dim=1):
-            self.n_vel_pres_data = samples.size(dim=1)
+        if self.n_data >= samples.size(dim=1):
+            self.n_data = samples.size(dim=1)
 
         # actual interpolation from grid to continuous point cloud
         samplesT = np.transpose(samples, (1, 0))
-        labels_u = interpn(grid_points, u_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
-        labels_v = interpn(grid_points, v_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
-        labels_w = interpn(grid_points, w_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
-        labels_p = interpn(grid_points, p_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
+        labels_u = interpn(grid_points, u_grid, samplesT[:self.n_data, :], bounds_error=False, fill_value=0)
+        labels_v = interpn(grid_points, v_grid, samplesT[:self.n_data, :], bounds_error=False, fill_value=0)
+        labels_w = interpn(grid_points, w_grid, samplesT[:self.n_data, :], bounds_error=False, fill_value=0)
+        labels_p = interpn(grid_points, p_grid, samplesT[:self.n_data, :], bounds_error=False, fill_value=0)
         # labels_c = interpn(grid_points, c_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
 
         # rotate vector field to match PINN domain (x,y,z) -> (x,z,y)
@@ -438,10 +438,10 @@ class TrainDataset(Dataset):
             fig = plt.figure(figsize=(8, 8))
             ax = fig.add_subplot(111, projection='3d')
 
-            x = samples[0, :self.n_vel_pres_data]
-            y = samples[1, :self.n_vel_pres_data]
-            z = samples[2, :self.n_vel_pres_data]
-            labels = labels[:, :self.n_vel_pres_data]
+            x = samples[0, :self.n_data]
+            y = samples[1, :self.n_data]
+            z = samples[2, :self.n_data]
+            labels = labels[:, :self.n_data]
 
             PLOT_ONLY_GROUND = True
             if PLOT_ONLY_GROUND:

@@ -49,8 +49,8 @@ def train(opt):
                                   num_workers=opt.num_threads, pin_memory=opt.pin_memory)
     print('validation data size: ', len(test_data_loader))
 
-    print('no. of collocation points (PDE): ', opt.num_sample_inout - opt.n_vel_pres_data)
-    print('no. of observation points (data): ', opt.n_vel_pres_data)
+    print('no. of collocation points (PDE): ', opt.num_sample_inout - opt.n_data)
+    print('no. of observation points (data): ', opt.n_data)
 
     # create net
     netG = HGPIFuNet_CH(opt, projection_mode).to(device=cuda)

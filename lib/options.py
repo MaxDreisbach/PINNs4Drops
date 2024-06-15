@@ -100,7 +100,7 @@ class BaseOptions():
         g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')
         g_model.add_argument('--weight_mom_z', default=10000, type=float, help='weight of z momentum pde loss')
 
-        parser.add_argument('--n_vel_pres_data', default=5000, type=int, help='number of observation points for data loss')
+        parser.add_argument('--n_data', default=5000, type=int, help='number of observation points for data loss')
 
         # for train
         parser.add_argument('--random_flip', action='store_true', help='if random flip')
