@@ -48,6 +48,9 @@ def train(opt):
                                   num_workers=opt.num_threads, pin_memory=opt.pin_memory)
     print('validation data size: ', len(test_data_loader))
 
+    print('no. of collocation points (PDE): ', opt.num_sample_inout - opt.n_vel_pres_data)
+    print('no. of observation points (data): ', opt.n_vel_pres_data)
+
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
     optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)

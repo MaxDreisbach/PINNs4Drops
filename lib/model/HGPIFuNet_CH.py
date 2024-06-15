@@ -287,12 +287,14 @@ class HGPIFuNet_CH(BasePIFuNet):
         self.preds = self.intermediate_preds_list[-1]
         self.pred_dimensional = self.get_dimensional_pred()
 
+
     def get_im_feat(self):
         '''
         Get the image filter
         :return: [B, C_feat, H, W] image feature after filtering
         '''
         return self.im_feat_list[-1]
+
 
     def get_solid_domain_mask(self, points):
         ground_mask = torch.zeros_like(points[:, :1, :])
@@ -302,6 +304,7 @@ class HGPIFuNet_CH(BasePIFuNet):
             else:
                 ground_mask[:, :, i] = 0
         return ground_mask
+
 
     def get_RBA_residual(self, residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
@@ -313,6 +316,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         return lambda_k * residuals, lambda_k
 
+
     def get_error(self):
         '''
         Calculates MSE-loss of occupancy field (alpha) data
@@ -320,11 +324,14 @@ class HGPIFuNet_CH(BasePIFuNet):
         '''
         error = 0
         for preds in self.intermediate_preds_list:
-            error += self.error_term(preds, self.labels)
+            # get prediction for observation points only
+            pred_a = preds[:, :, :self.n_vel_pres_data]
+            labels_a = self.labels[:, :, :self.n_vel_pres_data]
+            error += self.error_term(pred_a, labels_a)
         error /= len(self.intermediate_preds_list)
 
-        # devide error by 4 to be consistent with global loss weights of VOF
         return error
+
 
     def get_velocity_loss(self, points):
         '''
@@ -333,17 +340,20 @@ class HGPIFuNet_CH(BasePIFuNet):
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
-        # Do not calculate loss for sample points below surface in solid domain and within grooves
-        # TODO: Test if masking works
-        ground_mask = self.get_solid_domain_mask(points)
+        # get prediction for observation points
         pred_u = self.pred[:, 1, :self.n_vel_pres_data]
         pred_v = self.pred[:, 2, :self.n_vel_pres_data]
         pred_w = self.pred[:, 3, :self.n_vel_pres_data]
-        error_u = self.error_term(pred_u * ground_mask, self.labels_u * ground_mask)
-        error_v = self.error_term(pred_v * ground_mask, self.labels_v * ground_mask)
-        error_w = self.error_term(pred_w * ground_mask, self.labels_w * ground_mask)
+
+        # Do not calculate loss for sample points below surface in solid domain and within grooves
+        ground_mask = self.get_solid_domain_mask(points)
+        mask = ground_mask[:, :, :self.n_vel_pres_data]
+        error_u = self.error_term(pred_u * mask, self.labels_u * mask)
+        error_v = self.error_term(pred_v * mask, self.labels_v * mask)
+        error_w = self.error_term(pred_w * mask, self.labels_w * mask)
 
         return error_u, error_v, error_w
+
 
     def get_pressure_loss(self, points):
         '''
@@ -352,11 +362,14 @@ class HGPIFuNet_CH(BasePIFuNet):
         if self.n_vel_pres_data >= self.pred.size(dim=2):
             self.n_vel_pres_data = self.pred.size(dim=2)
 
-        ground_mask = self.get_solid_domain_mask(points)
+        # get prediction for observation points
         pred_p = self.pred[:, 4, :self.n_vel_pres_data]
-        error_p = self.error_term(pred_p * ground_mask, self.labels_p * ground_mask)
+        ground_mask = self.get_solid_domain_mask(points)
+        mask = ground_mask[:, :, :self.n_vel_pres_data]
+        error_p = self.error_term(pred_p * mask, self.labels_p * mask)
 
         return error_p
+
 
     def detect_faulty_derivative(self, grad, name):
         error_log = 'error_log.txt'
@@ -392,16 +405,17 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         return faulty_grad
 
+
     def get_pde_loss(self, points):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
         # get prediction
-        C = self.preds[0, 0, :]  # preds instead of pred to get masking of C
-        u = self.pred[0, 1, :]
-        v = self.pred[0, 2, :]
-        w = self.pred[0, 3, :]
-        p = self.pred[0, 4, :]
+        C = self.preds[0, 0, self.n_vel_pres_data:]  # preds instead of pred to get masking of C
+        u = self.pred[0, 1, self.n_vel_pres_data:]
+        v = self.pred[0, 2, self.n_vel_pres_data:]
+        w = self.pred[0, 3, self.n_vel_pres_data:]
+        p = self.pred[0, 4, self.n_vel_pres_data:]
 
         # get dimensional quantities
         # using de_norm() to transform alpha field prediction [0,1] to C prediction [-1,1]
@@ -414,42 +428,42 @@ class HGPIFuNet_CH(BasePIFuNet):
         # print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
 
         # derivatives
-        C_t = self.diff_t_de_norm(nth_derivative(C, wrt=self.t, n=1))
-        C_x = self.diff_xyz_de_norm(nth_derivative(C, wrt=self.x, n=1))
-        C_y = self.diff_xyz_de_norm(nth_derivative(C, wrt=self.y, n=1))
-        C_z = self.diff_xyz_de_norm(nth_derivative(C, wrt=self.z, n=1))
-        C_xx = self.diff_xyz_de_norm(nth_derivative(C_x, wrt=self.x, n=1))
-        C_yy = self.diff_xyz_de_norm(nth_derivative(C_y, wrt=self.y, n=1))
-        C_zz = self.diff_xyz_de_norm(nth_derivative(C_z, wrt=self.z, n=1))
+        C_t = self.diff_t_de_norm(self.nth_derivative(C, wrt=self.t, n=1))
+        C_x = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.x, n=1))
+        C_y = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.y, n=1))
+        C_z = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.z, n=1))
+        C_xx = self.diff_xyz_de_norm(self.nth_derivative(C_x, wrt=self.x, n=1))
+        C_yy = self.diff_xyz_de_norm(self.nth_derivative(C_y, wrt=self.y, n=1))
+        C_zz = self.diff_xyz_de_norm(self.nth_derivative(C_z, wrt=self.z, n=1))
         laplacian_C = C_xx + C_yy + C_zz
 
-        u_t = self.diff_t_de_norm(nth_derivative(u, wrt=self.t, n=1))
-        u_x = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.x, n=1))
-        u_y = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.y, n=1))
-        u_z = self.diff_xyz_de_norm(nth_derivative(u, wrt=self.z, n=1))
-        u_xx = self.diff_xyz_de_norm(nth_derivative(u_x, wrt=self.x, n=1))
-        u_yy = self.diff_xyz_de_norm(nth_derivative(u_y, wrt=self.y, n=1))
-        u_zz = self.diff_xyz_de_norm(nth_derivative(u_z, wrt=self.z, n=1))
+        u_t = self.diff_t_de_norm(self.nth_derivative(u, wrt=self.t, n=1))
+        u_x = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.x, n=1))
+        u_y = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.y, n=1))
+        u_z = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.z, n=1))
+        u_xx = self.diff_xyz_de_norm(self.nth_derivative(u_x, wrt=self.x, n=1))
+        u_yy = self.diff_xyz_de_norm(self.nth_derivative(u_y, wrt=self.y, n=1))
+        u_zz = self.diff_xyz_de_norm(self.nth_derivative(u_z, wrt=self.z, n=1))
 
-        v_t = self.diff_t_de_norm(nth_derivative(v, wrt=self.t, n=1))
-        v_x = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.x, n=1))
-        v_y = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.y, n=1))
-        v_z = self.diff_xyz_de_norm(nth_derivative(v, wrt=self.z, n=1))
-        v_xx = self.diff_xyz_de_norm(nth_derivative(v_x, wrt=self.x, n=1))
-        v_yy = self.diff_xyz_de_norm(nth_derivative(v_y, wrt=self.y, n=1))
-        v_zz = self.diff_xyz_de_norm(nth_derivative(v_z, wrt=self.z, n=1))
+        v_t = self.diff_t_de_norm(self.nth_derivative(v, wrt=self.t, n=1))
+        v_x = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.x, n=1))
+        v_y = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.y, n=1))
+        v_z = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.z, n=1))
+        v_xx = self.diff_xyz_de_norm(self.nth_derivative(v_x, wrt=self.x, n=1))
+        v_yy = self.diff_xyz_de_norm(self.nth_derivative(v_y, wrt=self.y, n=1))
+        v_zz = self.diff_xyz_de_norm(self.nth_derivative(v_z, wrt=self.z, n=1))
 
-        w_t = self.diff_t_de_norm(nth_derivative(w, wrt=self.t, n=1))
-        w_x = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.x, n=1))
-        w_y = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.y, n=1))
-        w_z = self.diff_xyz_de_norm(nth_derivative(w, wrt=self.z, n=1))
-        w_xx = self.diff_xyz_de_norm(nth_derivative(w_x, wrt=self.x, n=1))
-        w_yy = self.diff_xyz_de_norm(nth_derivative(w_y, wrt=self.y, n=1))
-        w_zz = self.diff_xyz_de_norm(nth_derivative(w_z, wrt=self.z, n=1))
+        w_t = self.diff_t_de_norm(self.nth_derivative(w, wrt=self.t, n=1))
+        w_x = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.x, n=1))
+        w_y = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.y, n=1))
+        w_z = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.z, n=1))
+        w_xx = self.diff_xyz_de_norm(self.nth_derivative(w_x, wrt=self.x, n=1))
+        w_yy = self.diff_xyz_de_norm(self.nth_derivative(w_y, wrt=self.y, n=1))
+        w_zz = self.diff_xyz_de_norm(self.nth_derivative(w_z, wrt=self.z, n=1))
 
-        p_x = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.x, n=1))
-        p_y = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.y, n=1))
-        p_z = self.diff_xyz_de_norm(nth_derivative(p, wrt=self.z, n=1))
+        p_x = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.x, n=1))
+        p_y = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.y, n=1))
+        p_z = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.z, n=1))
 
         # mixture density, viscosity
         rho_M = (1 + C) / 2 * self.rho_1 + (1 - C) / 2 * self.rho_2
@@ -470,9 +484,9 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         ''' Cahn-Hilliard equation '''
         # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021)
-        #self.epsilon = torch.clamp(self.epsilon, min=2.2e-05, max=0.01)
-        self.epsilon.data.clamp_(min=2.2e-05, max=0.01)
-        self.M_0 = (self.epsilon.item()) ** 2
+        self.epsilon.data.clamp_(min=2.2e-05, max=0.001)
+        self.M_0 = self.epsilon ** 2
+        #print('M_0: ', self.M_0)
 
         # mixing energy density
         lambda_CH = (3 * np.sqrt(2) / 4) * self.sigma * self.epsilon
@@ -535,13 +549,14 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
         ground_mask = self.get_solid_domain_mask(points)
+        mask = ground_mask[:, :, self.n_vel_pres_data:]
         # zero_residual_points = (ground_mask == 0).sum()
         # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
-        res_momentum_x = res_momentum_x * ground_mask
-        res_momentum_y = res_momentum_y * ground_mask
-        res_momentum_z = res_momentum_z * ground_mask
-        res_phase_adv = res_phase_adv * ground_mask
-        res_conti = res_conti * ground_mask
+        res_momentum_x = res_momentum_x * mask
+        res_momentum_y = res_momentum_y * mask
+        res_momentum_z = res_momentum_z * mask
+        res_phase_adv = res_phase_adv * mask
+        res_conti = res_conti * mask
 
         # get RBA update with local Lagrange multipliers
         res_momentum_x, RBA_mom_x = self.get_RBA_residual(res_momentum_x)

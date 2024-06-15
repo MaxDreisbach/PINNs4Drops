@@ -58,7 +58,7 @@ class BaseOptions():
         g_sample = parser.add_argument_group('Sampling')
         g_sample.add_argument('--sigma', type=float, default=5.0, help='perturbation standard deviation for positions')
 
-        g_sample.add_argument('--num_sample_inout', type=int, default=5000, help='# of sampling points')
+        g_sample.add_argument('--num_sample_inout', type=int, default=15000, help='total number of sampling points (observation & collocation)')
         g_sample.add_argument('--num_sample_color', type=int, default=0, help='# of sampling points')
 
         g_sample.add_argument('--z_size', type=float, default=200.0, help='z normalization factor')
@@ -100,10 +100,7 @@ class BaseOptions():
         g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')
         g_model.add_argument('--weight_mom_z', default=10000, type=float, help='weight of z momentum pde loss')
 
-        parser.add_argument('--n_vel_pres_data', default=5000, type=int, help='number of sample points for velocity '
-                                                                             'and pressure data loss (alpha field has'
-                                                                             ' different no. of sample points for '
-                                                                             'data loss!)')
+        parser.add_argument('--n_vel_pres_data', default=5000, type=int, help='number of observation points for data loss')
 
         # for train
         parser.add_argument('--random_flip', action='store_true', help='if random flip')

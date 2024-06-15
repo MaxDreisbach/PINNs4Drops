@@ -406,7 +406,6 @@ class TrainDataset(Dataset):
         grid_points = (x, y, z)
 
         # Limit number of data points (u,v,w,p) to amount of sampling points
-        # TODO: implement seperate sampling for data and pde residual points
         if self.n_vel_pres_data >= samples.size(dim=1):
             self.n_vel_pres_data = samples.size(dim=1)
 
@@ -463,7 +462,7 @@ class TrainDataset(Dataset):
                 y = y[y > - 2.75]
 
             # mappable = ax.scatter(x, y, z, s=10, c=labels_p, vmin=-500, vmax=500, cmap='viridis')
-            #mappable = ax.scatter(x, y, z, s=10, c=labels_u, cmap='coolwarm')
+            # mappable = ax.scatter(x, y, z, s=10, c=labels_u, cmap='coolwarm')
             mappable = ax.scatter(x, y, z, s=2, c=labels, cmap='coolwarm')
             plt.colorbar(mappable)
             ax.set_xlabel('$X$')

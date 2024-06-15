@@ -684,6 +684,7 @@ def plot_data_sample(x, y, z, labels, vmin, vmax):
     plt.show()
 
 def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name, dataset_type):
+    font_size = 28.0
     sample_x = samples[0, 0, :].detach().cpu().numpy()
     sample_y = samples[0, 1, :].detach().cpu().numpy()
     sample_z = samples[0, 2, :].detach().cpu().numpy()
@@ -725,7 +726,7 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
     x, y = np.meshgrid(np.arange(opt.resolution) / opt.resolution, np.arange(opt.resolution) / opt.resolution)
 
     if type == 'alpha':
-        levels = np.linspace(0, 1.0, 10)
+        levels = np.linspace(0, 1.0, 9)
         colormap = 'RdBu_r'
     if type == 'vel':
         levels = np.linspace(-1.5, 1.5, 10)
@@ -740,20 +741,41 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
     })
     plt.rcParams['figure.constrained_layout.use'] = True
 
-    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.75))
+    if plane_dim == 'y':
+        fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.85))
+    else:
+        fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=True, figsize=(15, 6.2))
+
     p1 = axs[0].contourf(x, y, var_plot, levels=levels, cmap=colormap)
     p2 = axs[1].contourf(x, y, gt_plot, levels=levels, cmap=colormap)
-    p3 = axs[2].contourf(x, y, err_plot, cmap=colormap)
+    p3 = axs[2].contourf(x, y, err_plot, levels=levels, cmap=colormap)
     axs[0].contourf(x, y, var_plot, levels=levels, cmap=colormap)
     axs[1].contourf(x, y, gt_plot, levels=levels, cmap=colormap)
-    axs[2].contourf(x, y, err_plot, cmap=colormap)
+    axs[2].contourf(x, y, err_plot, levels=levels, cmap=colormap)
+    #axs[0].set_xlim(xmin=0.0, xmax=1.0)
+    #axs[1].set_xlim(xmin=0.0, xmax=1.0)
+    #axs[2].set_xlim(xmin=0.0, xmax=1.0)
+    axs[0].set_xbound(lower=0.0, upper=1.0)
+    axs[1].set_xbound(lower=0.0, upper=1.0)
+    axs[2].set_xbound(lower=0.0, upper=1.0)
 
-    axs[0].set_ylabel('$y$', fontsize=16)
-    axs[0].set_xlabel('$x$', fontsize=16)
-    axs[1].set_xlabel('$x$', fontsize=16)
-    axs[2].set_xlabel('$x$', fontsize=16)
+    if plane_dim == 'x':
+        axs[0].set_ylabel('$y$', fontsize=font_size)
+        axs[0].set_xlabel('$z$', fontsize=font_size)
+        axs[1].set_xlabel('$z$', fontsize=font_size)
+        axs[2].set_xlabel('$z$', fontsize=font_size)
+    if plane_dim == 'y':
+        axs[0].set_ylabel('$z$', fontsize=font_size)
+        axs[0].set_xlabel('$x$', fontsize=font_size)
+        axs[1].set_xlabel('$x$', fontsize=font_size)
+        axs[2].set_xlabel('$x$', fontsize=font_size)
+    if plane_dim == 'z':
+        axs[0].set_ylabel('$y$', fontsize=font_size)
+        axs[0].set_xlabel('$x$', fontsize=font_size)
+        axs[1].set_xlabel('$x$', fontsize=font_size)
+        axs[2].set_xlabel('$x$', fontsize=font_size)
 
-    x = np.arange(0.0, 1.0 + 0.001, 0.2)
+    x = np.arange(0.2, 0.8 + 0.001, 0.2)
     y = np.arange(0.0, 1.0 + 0.001, 0.2)
     axs[0].set_xticks(x)
     axs[0].set_yticks(y)
@@ -763,27 +785,25 @@ def plot_contour(opt, samples, preds, labels, plane_dim, name, type, sample_name
     axs[2].set_yticks(y)
 
 
-    axs[0].tick_params(axis ='both', which ='major', labelsize = 20)
-    axs[1].tick_params(axis ='both', which ='major', labelsize = 20)
-    axs[2].tick_params(axis ='both', which ='major', labelsize = 20)
+    axs[0].tick_params(axis ='both', which ='major', labelsize = font_size)
+    axs[1].tick_params(axis ='both', which ='major', labelsize = font_size)
+    axs[2].tick_params(axis ='both', which ='major', labelsize = font_size)
 
-    axs[0].set_title(r'$\alpha_{pred}$', fontsize=20, y=1, pad=20)
-    axs[1].set_title(r'$\alpha_{gt}$', fontsize=20, y=1, pad=20)
-    axs[2].set_title(r'$\alpha_{err}$', fontsize=20, y=1, pad=20)
+    axs[0].set_title(r'$\alpha_{pred}$', fontsize=40, y=1, pad=20)
+    axs[1].set_title(r'$\alpha_{gt}$', fontsize=40, y=1, pad=20)
+    axs[2].set_title(r'$\alpha_{err}$', fontsize=40, y=1, pad=20)
 
-    #plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
     axs[0].set_aspect('equal', adjustable="datalim")
     axs[1].set_aspect('equal', adjustable="datalim")
     axs[2].set_aspect('equal', adjustable="datalim")
-    cbar1 = fig.colorbar(p1, ax=axs[0], location='bottom')
-    cbar2 = fig.colorbar(p2, ax=axs[1], location='bottom')
-    cbar3 = fig.colorbar(p3, ax=axs[2], location='bottom')
-    cbar1.ax.tick_params(labelsize=20, which='major', width=1.5, length=6)
-    cbar2.ax.tick_params(labelsize=20, which='major')
-    cbar3.ax.tick_params(labelsize=20, which='major')
-    cbar1.ax.locator_params(nbins=4)
-    cbar2.ax.locator_params(nbins=4)
-    cbar3.ax.locator_params(nbins=4)
+
+    if plane_dim == 'y':
+        cbar2 = fig.colorbar(p2, ax=axs[1], location='bottom', fraction=0.046, pad=0.04)
+        cbar2.ax.tick_params(labelsize=font_size, which='major')
+        cbar_ticks = [0.0, 0.25, 0.5, 0.75, 1.0]
+        cbar2.set_ticks(cbar_ticks)
+    else:
+        plt.tight_layout(pad=1.0, w_pad=2.5)
 
     filename = 'results/' + opt.name + '/pred_fields/'  + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
