@@ -144,32 +144,35 @@ def train(opt):
                 losses = get_data_loss_onramp(losses, train_idx, epoch, duration=1000)
             losses = get_pde_loss_onramp(losses, train_idx, epoch, duration=5000)
 
+            LOSS_SoftAdapt = False
+            if LOSS_SoftAdapt:
+                ''' Calculate loss weights with SoftAdapt on EWMA of losses 
+                refresh every 100 iterations'''
+                if train_idx == 0 and (epoch == 0 or epoch == opt.resume_epoch):
+                    losses_EWMA = losses
+                    loss_weights = torch.ones_like(losses) * 0.1
+                if train_idx % 1000 == 0 and train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
+                    #print(" Assigning initial loss weights")
+                    losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
+                    loss_weights = torch.ones_like(losses) * 0.1
+                    losses_EWMA_prev = losses_EWMA
+                if train_idx % 1000 == 0 and train_idx >= 5000:
+                    losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
+                    loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
+                    losses_EWMA_prev = losses_EWMA
+                    #print("Calculating new loss weights")
+                losses = loss_weights * losses
+            else:
+                ''' Calculate loss weights with method by Kiani & Dreisbach
+                refresh every iteration'''
+                losses_EWMA = torch.zeros_like(losses)
+                if train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
+                    loss_weights = torch.ones_like(losses) * 0.1
+                else:
+                    loss_weights = get_loss_weights_Kiani(losses)
+                    losses = loss_weights * losses
 
-            ''' Calculate loss weights with SoftAdapt on EWMA of losses 
-            refresh every 100 iterations'''
-            if train_idx == 0 and (epoch == 0 or epoch == opt.resume_epoch):
-                losses_EWMA = losses
-                loss_weights = torch.ones_like(losses) * 0.1
-
-
-            if train_idx % 1000 == 0 and train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
-                #print(" Assigning initial loss weights")
-                losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
-                loss_weights = torch.ones_like(losses) * 0.1
-                losses_EWMA_prev = losses_EWMA
-
-
-            if train_idx % 1000 == 0 and train_idx >= 5000:
-                losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
-                loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
-                losses_EWMA_prev = losses_EWMA
-                #print("Calculating new loss weights")
-
-
-            losses = loss_weights * losses
-
-            #print('assigned SoftAdapt: ', losses)
-            #print('SoftAdapt weights: ', loss_weights)
+            #print('loss weights: ', loss_weights)
 
             loss_total = torch.sum(losses)
             optimizerG.zero_grad()

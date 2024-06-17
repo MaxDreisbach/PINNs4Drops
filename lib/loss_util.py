@@ -5,6 +5,7 @@ from lib.options import BaseOptions
 # get options
 opt = BaseOptions().parse()
 
+
 def get_loss_weights_SoftAdapt(losses, losses_prev, beta=0.1, var_lw=False):
     ''' Implementation of SoftAdapt in two variants
     1) SoftAdapt based on loss ratios (https://docs.nvidia.com/deeplearning/modulus/modulus-v2209/user_guide/theory/advanced_schemes.html)
@@ -29,7 +30,7 @@ def get_loss_weights_SoftAdapt(losses, losses_prev, beta=0.1, var_lw=False):
     # NEW: make sure that alpha field loss does not drop - either assign max(weights) or 1/10 if w_alpha < 1/10
     w_alpha_lim = 0.1
     if weights[0] <= w_alpha_lim:
-        #weights[0] = torch.max(weights)
+        # weights[0] = torch.max(weights)
         weights[0] = w_alpha_lim
 
     return weights * 10
@@ -83,37 +84,39 @@ def get_pde_loss_onramp(losses, iteration, epoch, duration=5000):
     losses_uvwp = losses[1:5]
     losses_pde = losses[5:]
 
-    if iteration < duration and epoch==0:
+    if iteration < duration and epoch == 0:
         losses_pde = losses_pde * (iteration / duration)
 
     return torch.cat((loss_alpha, losses_uvwp, losses_pde), dim=0)
 
 
-def get_PDE_loss_scheduler(losses, losses_EWMA, iteration, it_start_pde_loss, epoch, ep_start_pde_loss):
-    thres_alpha = 0.03
+def get_loss_weights_Kiani(losses):
+    l_a = losses[:1]
+    l_u = losses[1:2]
+    l_v = losses[2:3]
+    l_w = losses[3:4]
+    l_p = losses[4:5]
+    l_c = losses[5:6]
+    l_ph = losses[6:7]
+    l_x = losses[7:8]
+    l_y = losses[8:9]
+    l_z = losses[9:10]
+    total_loss_data = l_a + l_u + l_v + l_w + l_p
+    total_loss_pde = l_c + l_ph + l_x + l_y + l_z
+    eps = 10 ** (-8)
 
-    losses_pde = losses[5:]
-    l_alpha_EWMA = losses_EWMA[:1]
+    # First update weights of data terms
+    w_a = torch.clip(total_loss_data / (l_a + eps), 0.01, 50.0)
+    w_u = torch.clip(total_loss_data / (l_u + eps), 0.01, 50.0)
+    w_v = torch.clip(total_loss_data / (l_v + eps), 0.01, 50.0)
+    w_w = torch.clip(total_loss_data / (l_w + eps), 0.01, 50.0)
+    w_p = torch.clip(total_loss_data / (l_p + eps), 0.01, 50.0)
 
-    if iteration == 0 and epoch == 0 or epoch == opt.resume_epoch:
-        PDE_LOSS = False
+    # Then update PDE-loss weights
+    w_c = torch.clip(total_loss_pde / (l_c + eps), 0.01, 50.0)
+    w_ph = torch.clip(total_loss_pde / (l_ph + eps), 0.01, 50.0)
+    w_x = torch.clip(total_loss_pde / (l_x + eps), 0.01, 50.0)
+    w_y = torch.clip(total_loss_pde / (l_y + eps), 0.01, 50.0)
+    w_z = torch.clip(total_loss_pde / (l_z + eps), 0.01, 50.0)
 
-    if l_alpha_EWMA <= thres_alpha and PDE_LOSS == False:
-        it_start_pde_loss = iteration
-        ep_start_pde_loss = epoch
-        PDE_LOSS = True
-
-
-    if PDE_LOSS == True:
-        it_pde_anneal = iteration - it_start_pde_loss
-        ''' learning rate annealing for pde loss terms'''
-        if it_pde_anneal < 5000 and epoch == ep_start_pde_loss:
-            losses_pde = losses_pde * (it_pde_anneal / 5000)
-        else:
-            '''Do nothing -> global weights for pde losses'''
-    else:
-        losses_pde = losses_pde * 0
-
-    return losses_pde, it_start_pde_loss, ep_start_pde_loss
-
-
+    return torch.stack((w_a, w_u, w_v, w_w, w_p, w_c, w_ph, w_x, w_y, w_z), dim=0)
