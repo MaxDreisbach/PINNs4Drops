@@ -139,8 +139,7 @@ def train(opt):
 
             # learning rate onramp for u,v,w,p data loss terms
             # this is done because the other losses overweight the alpha loss in early training otherwise
-            if epoch == 0:
-                losses = get_data_loss_onramp(losses, train_idx, epoch, duration=1000)
+            losses = get_data_loss_onramp(losses, train_idx, epoch, duration=1000)
             losses = get_pde_loss_onramp(losses, train_idx, epoch, duration=5000)
 
             LOSS_SoftAdapt = False
@@ -165,11 +164,11 @@ def train(opt):
                 ''' Calculate loss weights with method by Kiani & Dreisbach
                 refresh every iteration'''
                 losses_EWMA = torch.zeros_like(losses)
-                if train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
+                if train_idx <= 1000 and (epoch == 0 or epoch == opt.resume_epoch):
                     loss_weights = torch.ones_like(losses) * 0.1
                 else:
                     loss_weights = get_loss_weights_Kiani(losses)
-                    losses = loss_weights * losses
+                losses = loss_weights * losses
 
             #print('loss weights: ', loss_weights)
 

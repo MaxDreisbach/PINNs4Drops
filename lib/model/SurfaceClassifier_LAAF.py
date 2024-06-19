@@ -19,8 +19,8 @@ class SurfaceClassifier_LAAF(nn.Module):
                 self.filters.append(AdaptiveLinear(
                     filter_channels[l],
                     filter_channels[l + 1],
-                    adaptive_rate=1.0,
-                    adaptive_rate_scaler=1.0))
+                    adaptive_rate=0.1,
+                    adaptive_rate_scaler=10.0))
 
                 self.add_module("conv%d" % l, self.filters[l])
         else:
@@ -29,14 +29,14 @@ class SurfaceClassifier_LAAF(nn.Module):
                     self.filters.append(AdaptiveLinear(
                         filter_channels[l] + filter_channels[0],
                         filter_channels[l + 1],
-                        adaptive_rate=1.0,
-                        adaptive_rate_scaler=1.0))
+                        adaptive_rate=0.1,
+                        adaptive_rate_scaler=10.0))
                 else:
                     self.filters.append(AdaptiveLinear(
                         filter_channels[l],
                         filter_channels[l + 1],
-                        adaptive_rate=1.0,
-                        adaptive_rate_scaler=1.0))
+                        adaptive_rate=0.1,
+                        adaptive_rate_scaler=10.0))
 
                 self.add_module("conv%d" % l, self.filters[l])
 

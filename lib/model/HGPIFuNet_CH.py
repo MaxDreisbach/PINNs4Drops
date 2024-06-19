@@ -489,7 +489,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         ''' Cahn-Hilliard equation '''
         # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021)
-        self.epsilon.data.clamp_(min=2.2e-05, max=0.001)
+        self.epsilon.data.clamp_(min=2.2e-05, max=0.01)
         self.M_0 = self.epsilon ** 2
         #print('M_0: ', self.M_0)
 

@@ -101,16 +101,17 @@ def get_loss_weights_Kiani(losses):
     l_x = losses[7:8]
     l_y = losses[8:9]
     l_z = losses[9:10]
-    total_loss_data = l_a + l_u + l_v + l_w + l_p
+    total_loss_uvwp = l_u + l_v + l_w + l_p
+    total_loss_data = total_loss_uvwp + l_a
     total_loss_pde = l_c + l_ph + l_x + l_y + l_z
     eps = 10 ** (-8)
 
     # First update weights of data terms
+    w_u = torch.clip(total_loss_uvwp / (l_u + eps), 0.01, 50.0)
+    w_v = torch.clip(total_loss_uvwp / (l_v + eps), 0.01, 50.0)
+    w_w = torch.clip(total_loss_uvwp / (l_w + eps), 0.01, 50.0)
+    w_p = torch.clip(total_loss_uvwp / (l_p + eps), 0.01, 50.0)
     w_a = torch.clip(total_loss_data / (l_a + eps), 0.01, 50.0)
-    w_u = torch.clip(total_loss_data / (l_u + eps), 0.01, 50.0)
-    w_v = torch.clip(total_loss_data / (l_v + eps), 0.01, 50.0)
-    w_w = torch.clip(total_loss_data / (l_w + eps), 0.01, 50.0)
-    w_p = torch.clip(total_loss_data / (l_p + eps), 0.01, 50.0)
 
     # Then update PDE-loss weights
     w_c = torch.clip(total_loss_pde / (l_c + eps), 0.01, 50.0)
@@ -119,4 +120,4 @@ def get_loss_weights_Kiani(losses):
     w_y = torch.clip(total_loss_pde / (l_y + eps), 0.01, 50.0)
     w_z = torch.clip(total_loss_pde / (l_z + eps), 0.01, 50.0)
 
-    return torch.stack((w_a, w_u, w_v, w_w, w_p, w_c, w_ph, w_x, w_y, w_z), dim=0)
+    return torch.stack((w_a, w_u, w_v, w_w, w_p, w_c, w_ph, w_x, w_y, w_z), dim=0) * 0.1
