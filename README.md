@@ -1,4 +1,4 @@
-# PF-PINN
+# PINNs4Drops
 
 
 
