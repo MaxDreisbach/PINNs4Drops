@@ -121,18 +121,18 @@ if __name__ == '__main__':
     test_images = [f for f in test_images if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
     #sort and cut list
     test_images.sort()
-    #test_images = test_images[50:]
+    test_images = test_images[9:]
     test_masks = [f[:-4]+'_mask.png' for f in test_images]
     test_time_labels = [f[:-4] + '_time.txt' for f in test_images]
 
     print("number of images to be reconstructed: ", len(test_masks))
 
     for image_path, mask_path, time_path in tqdm.tqdm(zip(test_images, test_masks, test_time_labels)):
-        try:
-            print(image_path, mask_path, time_path)
-            data = evaluator.load_image(image_path, mask_path, time_path)
-            evaluator.eval(data, True, True)
-        except Exception as e:
-            print("error:", e.args)
+        #try:
+        print(image_path, mask_path, time_path)
+        data = evaluator.load_image(image_path, mask_path, time_path)
+        evaluator.eval(data, True, True)
+        #except Exception as e:
+        #    print("error:", e.args)
 
 

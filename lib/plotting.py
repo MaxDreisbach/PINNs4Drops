@@ -305,12 +305,14 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
 
     # mask out prediction in solid domain
     ground = 28
-    u_interpn[:, :int(28 * opt.resolution / 256), :] = 0
-    v_interpn[:, :int(28 * opt.resolution / 256), :] = 0
-    w_interpn[:, :int(28 * opt.resolution / 256), :] = 0
-    label_u_interpn[:, :int(28 * opt.resolution / 256), :] = 0
-    label_v_interpn[:, :int(28 * opt.resolution / 256), :] = 0
-    label_w_interpn[:, :int(28 * opt.resolution / 256), :] = 0
+    u_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    v_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    w_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    p_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_u_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_v_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_w_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+    label_p_interpn[:, :int(ground * opt.resolution / 256), :] = 0
 
 
     if plane_dim == 'x':
@@ -552,6 +554,10 @@ def plot_iso_surface(opt, samples, preds, name, sample_name, dataset_type):
     pred_linear = griddata(sample, pred, (X,Y,Z), method='nearest')
     pred_interpn[np.isnan(pred_interpn)] = pred_linear[np.isnan(pred_interpn)]
 
+    # mask out prediction in solid domain
+    ground = 28
+    pred_interpn[:, :int(ground * opt.resolution / 256), :] = 0
+
     mesh = pyvista.StructuredGrid(X, Y, Z)
     mesh.point_data['values'] = pred_interpn.ravel(order='F')
 
@@ -582,6 +588,73 @@ def plot_iso_surface(opt, samples, preds, name, sample_name, dataset_type):
         # p.screenshot(filename, transparent_background=True)
         p.close()
     else:
+        p.show()
+
+def plot_iso_surface_eval(opt, samples, preds, name, sample_name, dataset_type):
+    # If environment variable PYVISTA_OFF_SCREEN is set to true save a png
+    # otherwise create interactive plot
+    OFF_SCREEN = False
+    if OFF_SCREEN:
+        pyvista.start_xvfb(wait=0.1)
+
+    X = samples[0, :, :, :]
+    Y = samples[1, :, :, :]
+    Z = samples[2, :, :, :]
+
+    # mask out prediction in solid domain
+    #ground = 28
+    #preds[:, :int(ground * opt.resolution / 256), :] = 0
+    # mask out half of the domain for plotting purposes
+    #preds[:, :, int(opt.resolution / 2):] = 0
+
+    mesh = pyvista.StructuredGrid(X, Y, Z)
+    mesh.point_data[name] = preds.ravel(order='F')
+
+    #bounds = [0.2, 0.8, 0.2, 0.8, 0.2, 0.8]
+    bounds = [0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+    mesh = mesh.clip_box(bounds)
+
+    if sample_name == 'vol_frac':
+        vmin = 0
+        vmax = 1
+        num_contours = 5
+    if sample_name == 'p':
+        vmin = 50
+        vmax = 400
+        num_contours = 12
+
+    #vmin = preds.min()
+    #vmax = preds.max()
+    labels = dict(zlabel='Z', xlabel='X', ylabel='Y')
+    contours = mesh.contour(np.linspace(vmin, vmax, num_contours))
+
+    pyvista.set_plot_theme('document')
+    camera = pyvista.Camera()
+    camera.position = (-350.0/128, -100.0/128, 700.0/128)
+    camera.focal_point = (5.0/128, 20.0/128, 5.0/128)
+
+    if OFF_SCREEN:
+        p = pyvista.Plotter(off_screen=True)
+    else:
+        p = pyvista.Plotter()
+
+    # clip half of the domain
+    contours = contours.clip(normal="x")
+
+    #p.add_mesh(mesh.outline(), color="k", show_edges=False)
+    p.add_mesh(contours, opacity=1.0, clim=[vmin, vmax], cmap='jet')
+    #p.show_grid(**labels)
+    p.add_axes(**labels)
+    #p.camera = camera
+
+    if OFF_SCREEN:
+        filename = 'results/' + dataset_type + '_' + sample_name + '_'  + '_pred_3d.svg'
+        p.save_graphic(filename)
+        # p.screenshot(filename, transparent_background=True)
+        p.close()
+    else:
+        filename = 'results/' + dataset_type + '_' + sample_name + '_'  + '_pred_3d.svg'
+        p.save_graphic(filename)
         p.show()
 
 

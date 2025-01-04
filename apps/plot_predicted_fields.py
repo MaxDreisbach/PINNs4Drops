@@ -75,8 +75,9 @@ def train(opt):
             print(data['name'])
             dataset.append(data)
 
-        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='x', ds='test', plot_results=True)
         test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='z', ds='test',
+                                 plot_results=True)
+        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='x', ds='test',
                                  plot_results=True)
 
 
@@ -89,8 +90,10 @@ def train(opt):
             print(data['name'])
             dataset.append(data)
 
-        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), ds='train', plot_results=True)
-        train_dataset.is_train = True
+        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='z', ds='test',
+                                 plot_results=True)
+        test_errors = calc_error(opt, netG, cuda, dataset, len(plot_timesteps), slice_dim='x', ds='test',
+                                 plot_results=True)
 
 
 if __name__ == '__main__':

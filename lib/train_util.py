@@ -95,6 +95,13 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=True, gen_vel_pres=Fals
         #gen_vtk_prediction(coords, w, 'w', save_path[:-4])
         #gen_vtk_prediction(coords, p, 'p', save_path[:-4])
 
+        # plot 3D-contours
+        plot_iso_surface_eval(opt, coords, sdf, 'volume fraction [-]', 'vol_frac', 'exp')
+        plot_iso_surface_eval(opt, coords, p, 'p [Pa]', 'p', 'exp')
+        plot_iso_surface_eval(opt, coords, u, 'u [m/s]', 'u', 'exp')
+        plot_iso_surface_eval(opt, coords, v, 'v [m/s]', 'v', 'exp')
+        plot_iso_surface_eval(opt, coords, w, 'w [m/s]', 'w', 'exp')
+
     verts_tensor = torch.from_numpy(verts.T).unsqueeze(0).to(device=cuda).float()
     xyz_tensor = net.projection(verts_tensor, calib_tensor[:1])
     uv = xyz_tensor[:, :2, :]

@@ -129,7 +129,7 @@ def train(opt):
             label_tensor_p = train_data['labels_p'].to(device=cuda)
 
             iter_data_time = time.time()
-            res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, epsilon = netG.forward(
+            res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, epsilon = netG.forward(
                 image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
                 labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
                 get_PINN_loss=True)
@@ -173,7 +173,7 @@ def train(opt):
 
             #print('loss weights: ', loss_weights)
 
-            loss_total = torch.sum(losses)
+            loss_total = torch.sum(losses + loss_eps)
             optimizerG.zero_grad()
             loss_total.backward()
             optimizerG.step()
@@ -183,12 +183,12 @@ def train(opt):
                     iter_net_time - epoch_start_time)
 
             if train_idx % opt.freq_plot == 0:
-                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | L_t: {4:.06f} | L_a: {5:.06f} | L_u: {6:.06f} | L_v: {7:.06f} | L_w: {8:.06f} | L_p: {9:.06f} | L_c: {10:.9f} | L_ph: {11:.9f} | L_mom_x: {12:.9f} | L_mom_y: {13:.9f} | L_mom_z: {14:.9f} | LR: {15:.06f} | alpha_EWMA: {16:.06f} | Sigma: {17:.02f} | epsilon: {18:.09f} | dataT: {19:.05f} | netT: {20:.05f} | ETA: {21:02d}:{22:02d}\n'.format(
+                loss_log_s = 'Name: {0} | Epoch: {1} | {2}/{3} | L_t: {4:.06f} | L_a: {5:.06f} | L_u: {6:.06f} | L_v: {7:.06f} | L_w: {8:.06f} | L_p: {9:.06f} | L_c: {10:.9f} | L_ph: {11:.9f} | L_mom_x: {12:.9f} | L_mom_y: {13:.9f} | L_mom_z: {14:.9f} | LR: {15:.06f} | alpha_EWMA: {16:.06f} | Sigma: {17:.02f} | loss eps: {18:.09f} | epsilon: {19:.09f} | dataT: {20:.05f} | netT: {21:.05f} | ETA: {22:02d}:{23:02d}\n'.format(
                     opt.name, epoch, train_idx, len(train_data_loader), loss_total.item(),
                     loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(),
                     loss_data_p.item(), loss_conti.item(),
                     loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item(),
-                    lr, losses_EWMA[:1].item(), opt.sigma, epsilon.item(), iter_data_time - iter_start_time,
+                    lr, losses_EWMA[:1].item(), opt.sigma, loss_eps, epsilon.item(), iter_data_time - iter_start_time,
                                                         iter_net_time - iter_data_time, int(eta // 60),
                     int(eta - 60 * (eta // 60)))
                 print(loss_log_s)

@@ -9,7 +9,6 @@ from torch.autograd import grad
 
 from .BasePIFuNet import BasePIFuNet
 from .SurfaceClassifier import SurfaceClassifier
-from .ConditionedSurfaceClassifier import ConditionedSurfaceClassifier
 from .SurfaceClassifier_LAAF import SurfaceClassifier_LAAF
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *

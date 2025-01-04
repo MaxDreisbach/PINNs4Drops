@@ -9,7 +9,7 @@ from torch.autograd import grad
 
 from .BasePIFuNet import BasePIFuNet
 from .SurfaceClassifier_CH import SurfaceClassifier
-from .ConditionedSurfaceClassifier import ConditionedSurfaceClassifier
+from .SurfaceClassifier_LAAF import SurfaceClassifier_LAAF
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
@@ -85,8 +85,12 @@ class HGPIFuNet_CH(BasePIFuNet):
                 no_residual=self.opt.no_residual,
                 last_op=nn.Sigmoid())
         else:
-            print('Using conditioned MLP instead of original MLP architecture from PIFuNet')
-            self.surface_classifier = ConditionedSurfaceClassifier()
+            print('Using layer-wise adaptive activation functions PIFuNet')
+            self.surface_classifier = SurfaceClassifier_LAAF(
+                filter_channels=self.opt.mlp_dim,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid())
 
         self.normalizer = DepthNormalizer(opt)
 
@@ -123,6 +127,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         # self.epsilon = 0.01  # following Qiu (2022) - https://doi.org/10.1063/5.0091063
         self.epsilon = nn.Parameter(0.01 * torch.ones(1))  # learnable epsilon
         self.M_0 = (self.epsilon.item()) ** 2
+        self.L_THRESH = 0.05
         print('epsilon: ', self.epsilon.item())
         print('M_0: ', self.M_0)
 
@@ -411,7 +416,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         return faulty_grad
 
 
-    def get_pde_loss(self, points):
+    def get_pde_loss(self, points, l_eps=False):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
@@ -489,7 +494,12 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         ''' Cahn-Hilliard equation '''
         # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021)
-        self.epsilon.data.clamp_(min=2.2e-05, max=0.01)
+        if l_eps:
+            self.epsilon.data.clamp_(min=2.2e-05, max=0.01)
+            eps_loss = F.huber_loss(self.epsilon, 2.2e-05 * torch.ones_like(self.epsilon))
+        else:
+            self.epsilon.data.clamp_(min=0.01, max=0.01)
+            eps_loss = F.huber_loss(self.epsilon, 0.01 * torch.ones_like(self.epsilon))
         self.M_0 = self.epsilon ** 2
         #print('M_0: ', self.M_0)
 
@@ -585,7 +595,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         conti_loss = F.mse_loss(res_conti, torch.zeros_like(res_conti))
 
-        return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z
+        return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z, eps_loss
 
     def forward(self, images, points, calibs, transforms=None, labels=None, labels_u=None,
                 labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
@@ -605,10 +615,16 @@ class HGPIFuNet_CH(BasePIFuNet):
         loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
         loss_data_p = self.get_pressure_loss(points=points)
 
+        # only learn interface thickness when alpha field is sufficiently converged
+        if loss_data_alpha < self.L_THRESH:
+            learn_eps = True
+        else:
+            learn_eps = False
+
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
-            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(
-                points=points)
+            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps = self.get_pde_loss(
+                points=points, l_eps=learn_eps)
         else:
             loss_conti = loss_data_alpha * 0
             loss_phase_conv = loss_data_alpha * 0
@@ -616,4 +632,4 @@ class HGPIFuNet_CH(BasePIFuNet):
             loss_momentum_y = loss_data_alpha * 0
             loss_momentum_z = loss_data_alpha * 0
 
-        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, self.epsilon
+        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, self.epsilon
