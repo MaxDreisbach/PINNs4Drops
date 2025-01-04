@@ -1,4 +1,15 @@
 # PINNs4Drops
+Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows (code)
+
+by Maximilian Dreisbach (Institute of Fluid Mechanics (ISTM) - Karlsruhe Institute of Technology (KIT))
+and Elham Kiyani (Division of Applied Mathematics - Brown University)
+
+This code allows the evalution and training of the physics-informed neural networks for spatio-temporal gas-liquid interface reconstruction in two-phase flows as presented 
+in our article "Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows".
+
+The datasets used in this work, as well as the weights of the trained PINNs are available here: https://doi.org/10.35097/egqrfznmr9yp2s7f
+
+If you have any questions regarding this code, please feel free to contact Maximilian (maximilian.dreisbach@kit.edu).
 
 
 
