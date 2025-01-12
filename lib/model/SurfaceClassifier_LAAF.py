@@ -5,7 +5,7 @@ from .AdaptiveLinear import AdaptiveLinear
 
 
 class SurfaceClassifier_LAAF(nn.Module):
-    def __init__(self, filter_channels, num_views=1, no_residual=True, last_op=None):
+    def __init__(self, filter_channels, num_views=1, no_residual=True, last_op=None, LAAF_scale=2.0):
         super(SurfaceClassifier_LAAF, self).__init__()
 
         self.filters = []
@@ -13,31 +13,33 @@ class SurfaceClassifier_LAAF(nn.Module):
         self.no_residual = no_residual
         filter_channels = filter_channels
         self.last_op = last_op
+        self.LAAF_scale = LAAF_scale
 
         if self.no_residual:
             for l in range(0, len(filter_channels) - 1):
                 self.filters.append(AdaptiveLinear(
                     filter_channels[l],
                     filter_channels[l + 1],
-                    adaptive_rate=0.1,
-                    adaptive_rate_scaler=10.0))
+                    adaptive_rate=1/self.LAAF_scale,
+                    adaptive_rate_scaler=self.LAAF_scale))
 
                 self.add_module("conv%d" % l, self.filters[l])
         else:
+            print('using skip connections in MLP')
             for l in range(0, len(filter_channels) - 1):
                 if 0 != l:
                     self.filters.append(AdaptiveLinear(
                         filter_channels[l] + filter_channels[0],
                         filter_channels[l + 1],
-                        adaptive_rate=0.1,
-                        adaptive_rate_scaler=10.0))
+                        adaptive_rate=1/self.LAAF_scale,
+                        adaptive_rate_scaler=self.LAAF_scale))
                 else:
                     self.filters.append(AdaptiveLinear(
                         filter_channels[l],
                         filter_channels[l + 1],
-                        adaptive_rate=0.1,
-                        adaptive_rate_scaler=10.0))
-
+                        adaptive_rate=1/self.LAAF_scale,
+                        adaptive_rate_scaler=self.LAAF_scale))
+                print("layer: ", l, "neurons: ", filter_channels[l])
                 self.add_module("conv%d" % l, self.filters[l])
 
     def forward(self, im_feat, x_feat, y_feat, z_feat, t_feat):
@@ -65,12 +67,12 @@ class SurfaceClassifier_LAAF(nn.Module):
                     else torch.cat([y, tmpy], 1)
                 )
             if i != len(self.filters) - 1:
-                # y = F.leaky_relu(y)
                 ''' Changed to tanh activation function for PINN'''
                 # TODO: sine or GELU activation
                 y = torch.tanh(y)
                 # y = nn.GELU(y)
                 # y = torch.sin(y)
+                # y = F.leaky_relu(y)
 
             if self.num_views > 1 and i == len(self.filters) // 2:
                 y = y.view(
@@ -83,11 +85,8 @@ class SurfaceClassifier_LAAF(nn.Module):
         if self.last_op:
             y = y.swapaxes(0, 1)
             y = y.unsqueeze(0)
-            '''
-            Normalisation of the labels for (u,v,w,p) 
-            -> all outputs of MLP can have sigmoid activation function as labels are normalised to [0, 1]
-            -> sigmoid forces output to be either 0 or 1 -> linear layer (no activation for velocity and exponential for p)
-            
+
+            '''           
             Different activation functions for each output variable -> alpha -> sigmoid, (u,v,p) - None, p ->exponential
             (see Buhendwa et al. (2021) - https://doi.org/10.1016/j.mlwa.2021.100029)
             '''

@@ -8,13 +8,13 @@ import fnmatch
 import random
 
 ### Split
-ratio_train = 0.7
-ratio_val = 0.1
+ratio_train = 0.15
+ratio_val = 0.15
 
 
 ### Input dirs
-out_path = "../train_data_DFS2023C/"
-in_path = "../train_data_DFS2023C/RENDER/"
+out_path = "../train_data_DFS2024A/"
+in_path = "../train_data_DFS2024A/RENDER/"
 
 def pick_random(dnames,out_path):
     n = int((1-ratio_train) * len(dnames))
@@ -25,6 +25,9 @@ def pick_random(dnames,out_path):
     n_val = int(ratio_val * len(dnames))
     val_names = random.sample(val_test_names, n_val)
     test_names = list(set(val_test_names) - set(val_names))
+    
+    val_names.sort()
+    test_names.sort()
 
     valdir = os.path.join(out_path, 'val.txt')
     testdir = os.path.join(out_path, 'test.txt')

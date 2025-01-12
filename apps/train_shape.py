@@ -32,8 +32,11 @@ def train(opt):
 
     train_dataset = TrainDataset(opt, phase='train')
     test_dataset = TrainDataset(opt, phase='test')
-
     projection_mode = train_dataset.projection_mode
+
+    # get random sample of training data
+    #tr_iter = 10
+    #train_dataset_split = torch.utils.data.random_split(train_dataset, [tr_iter, len(train_dataset) - tr_iter])[0]
 
     # create data loader
     train_data_loader = DataLoader(train_dataset,
@@ -48,11 +51,15 @@ def train(opt):
                                   num_workers=opt.num_threads, pin_memory=opt.pin_memory)
     print('validation data size: ', len(test_data_loader))
 
-    print('no. of collocation points (PDE): ', opt.num_sample_inout - opt.n_data)
+    print('no. of collocation points (PDE): ', opt.n_residual)
     print('no. of observation points (data): ', opt.n_data)
 
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
+
+    #for key, value in netG.state_dict().items():
+    #    print(f"{key}: {value.shape}\n{value}")
+
     optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
     # optimizerG = torch.optim.Adam(netG.parameters(), lr=opt.learning_rate, amsgrad=True)
 
@@ -113,6 +120,8 @@ def train(opt):
             image_tensor = train_data['img'].to(device=cuda)
             calib_tensor = train_data['calib'].to(device=cuda)
             sample_tensor = train_data['samples'].to(device=cuda)
+            sample_tensor_uvwp = train_data['samples_uvwp'].to(device=cuda)
+            sample_tensor_residual = train_data['samples_residual'].to(device=cuda)
 
             image_tensor, calib_tensor = reshape_multiview_tensors(image_tensor, calib_tensor)
 
@@ -129,7 +138,7 @@ def train(opt):
 
             iter_data_time = time.time()
             res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = netG.forward(
-                image_tensor, sample_tensor, calib_tensor, labels=label_tensor, labels_u=label_tensor_u,
+                image_tensor, sample_tensor, calib_tensor, labels=label_tensor, uvwp_points=sample_tensor_uvwp, residual_points=sample_tensor_residual, labels_u=label_tensor_u,
                 labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
                 get_PINN_loss=True)
 
@@ -139,20 +148,21 @@ def train(opt):
 
             # learning rate onramp for u,v,w,p data loss terms
             # this is done because the other losses overweight the alpha loss in early training otherwise
-            losses = get_data_loss_onramp(losses, train_idx, epoch, duration=1000)
-            losses = get_pde_loss_onramp(losses, train_idx, epoch, duration=5000)
+            losses = get_data_loss_onramp(losses, train_idx, epoch, duration=10000)
+            losses = get_pde_loss_cuton(losses, a_thresh=0.03)
+            #print('losses before weighting: ', losses)
 
-            LOSS_SoftAdapt = False
+            LOSS_SoftAdapt = True
             if LOSS_SoftAdapt:
                 ''' Calculate loss weights with SoftAdapt on EWMA of losses 
                 refresh every 100 iterations'''
                 if train_idx == 0 and (epoch == 0 or epoch == opt.resume_epoch):
                     losses_EWMA = losses
-                    loss_weights = torch.ones_like(losses) * 0.1
+                    loss_weights = torch.ones_like(losses) * 1.0
                 if train_idx % 1000 == 0 and train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
                     # print(" Assigning initial loss weights")
                     losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
-                    loss_weights = torch.ones_like(losses) * 0.1
+                    loss_weights = torch.ones_like(losses) * 1.0
                     losses_EWMA_prev = losses_EWMA
                 if train_idx % 1000 == 0 and train_idx >= 5000:
                     losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
@@ -161,18 +171,19 @@ def train(opt):
                     # print("Calculating new loss weights")
                 losses = loss_weights * losses
             else:
-                ''' Calculate loss weights with method by Kiani & Dreisbach
+                ''' Calculate loss weights with inverse relative magnitude
                 refresh every iteration'''
                 losses_EWMA = torch.zeros_like(losses)
-                if train_idx <= 1000 and (epoch == 0 or epoch == opt.resume_epoch):
-                    loss_weights = torch.ones_like(losses) * 0.1
+                if train_idx <= 0 and epoch == 0:
+                    loss_weights = torch.ones_like(losses) * 1.0
                 else:
                     loss_weights = get_loss_weights_Kiani(losses)
                 losses = loss_weights * losses
 
             #print('loss weights: ', loss_weights)
-
+            #print('losses after weighting: ', losses)
             loss_total = torch.sum(losses)
+            #print('loss total: ', loss_total)
             optimizerG.zero_grad()
             loss_total.backward()
             optimizerG.step()
@@ -202,13 +213,8 @@ def train(opt):
                 torch.save(netG.state_dict(), '%s/%s/netG_latest' % (opt.checkpoints_path, opt.name))
                 torch.save(netG.state_dict(), '%s/%s/netG_epoch_%d' % (opt.checkpoints_path, opt.name, epoch))
 
-            if train_idx % opt.freq_save_ply == 0:
-                save_path = '%s/%s/pred.ply' % (opt.results_path, opt.name)
-                r = res[0].cpu()
-                points = sample_tensor[0].transpose(0, 1).cpu()
-                save_samples_truncted_prob(save_path, points.detach().numpy(), r.detach().numpy())
-
             iter_data_time = time.time()
+
 
         # update learning rate
         lr = adjust_learning_rate(optimizerG, epoch, lr, opt.schedule, opt.gamma)

@@ -81,26 +81,32 @@ class BaseOptions():
         g_model.add_argument('--hourglass_dim', type=int, default='256', help='256 | 512')
 
         # Classification General
-        g_model.add_argument('--use_cond_MLP', default=False, type=bool, help='switch MLP architecture to conditioned latent space')
+        g_model.add_argument('--use_FF', default=False, type=bool,
+                             help='Use Fourier feature encoding')
         g_model.add_argument('--mlp_dim', nargs='+', default=[260, 1024, 512, 256, 128, 5], type=int,
                              help='# of dimensions of mlp')
-        g_model.add_argument('--mlp_dim_color', nargs='+', default=[513, 1024, 512, 256, 128, 3],
+        g_model.add_argument('--mlp_dim_FF', nargs='+', default=[513, 1024, 512, 256, 128, 5], type=int,
+                             help='# of dimensions of mlp')
+        g_model.add_argument('--mlp_dim_CH2', nargs='+', default=[260, 1024, 512, 256, 128, 6],
                              type=int, help='# of dimensions of color mlp')
         g_model.add_argument('--use_tanh', action='store_true',
                              help='using tanh after last conv of image_filter network')
 
         ''' NEW: Added loss weights for PINN'''
-        g_model.add_argument('--weight_u', default=100, type=float, help='weight of u velocity data loss')
-        g_model.add_argument('--weight_v', default=100, type=float, help='weight of v velocity data loss')
-        g_model.add_argument('--weight_w', default=100, type=float, help='weight of w velocity data loss')
-        g_model.add_argument('--weight_p', default=100, type=float, help='weight of pressure data loss')
-        g_model.add_argument('--weight_conti', default=10000 , type=float, help='weight of continuity pde loss')
-        g_model.add_argument('--weight_phase', default=10000, type=float, help='weight of phase advection pde loss')
-        g_model.add_argument('--weight_mom_x', default=10000, type=float, help='weight of x momentum pde loss')
-        g_model.add_argument('--weight_mom_y', default=10, type=float, help='weight of y momentum pde loss')
-        g_model.add_argument('--weight_mom_z', default=10000, type=float, help='weight of z momentum pde loss')
+        g_model.add_argument('--weight_u', default=10, type=float, help='weight of u velocity data loss')
+        g_model.add_argument('--weight_v', default=10, type=float, help='weight of v velocity data loss')
+        g_model.add_argument('--weight_w', default=10, type=float, help='weight of w velocity data loss')
+        g_model.add_argument('--weight_p', default=10, type=float, help='weight of pressure data loss')
+        g_model.add_argument('--weight_conti', default=1000 , type=float, help='weight of continuity pde loss')
+        g_model.add_argument('--weight_phase', default=1000, type=float, help='weight of phase advection pde loss')
+        g_model.add_argument('--weight_mom_x', default=1000, type=float, help='weight of x momentum pde loss')
+        g_model.add_argument('--weight_mom_y', default=1, type=float, help='weight of y momentum pde loss')
+        g_model.add_argument('--weight_mom_z', default=100, type=float, help='weight of z momentum pde loss')
+        g_model.add_argument('--weight_l_eps', default=100, type=float, help='weight for learnable interface thickness (Cahn-Hilliard)')
+        g_model.add_argument('--weight_phi', default=0.1, type=float, help='weight of identity for chemical potential (Cahn-Hilliard)')
 
-        parser.add_argument('--n_data', default=5000, type=int, help='number of observation points for data loss')
+        parser.add_argument('--n_data', default=1500, type=int, help='number of observation points for data loss')
+        parser.add_argument('--n_residual', default=15000, type=int, help='number of observation points for data loss')
 
         # for train
         parser.add_argument('--random_flip', action='store_true', help='if random flip')
@@ -109,6 +115,8 @@ class BaseOptions():
         parser.add_argument('--no_residual', action='store_true', help='no skip connection in mlp')
         # NEW: learning rate schedule shortened
         parser.add_argument('--schedule', type=int, nargs='+', default=[4, 6, 9, 10],
+                            help='Decrease learning rate at these epochs.')
+        parser.add_argument('--schedule_DSH2024', type=int, nargs='+', default=[40, 60, 90, 100],
                             help='Decrease learning rate at these epochs.')
         parser.add_argument('--gamma', type=float, default=0.1, help='LR is multiplied by gamma on schedule.')
         parser.add_argument('--color_loss_type', type=str, default='l1', help='mse | l1')

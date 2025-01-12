@@ -165,7 +165,7 @@ def train(opt):
                 ''' Calculate loss weights with method by Kiani & Dreisbach
                 refresh every iteration'''
                 losses_EWMA = torch.zeros_like(losses)
-                if train_idx <= 1000 and (epoch == 0 or epoch == opt.resume_epoch):
+                if train_idx <= 1000 and epoch == 0:
                     loss_weights = torch.ones_like(losses) * 0.1
                 else:
                     loss_weights = get_loss_weights_Kiani(losses)
@@ -173,7 +173,7 @@ def train(opt):
 
             #print('loss weights: ', loss_weights)
 
-            loss_total = torch.sum(losses + loss_eps)
+            loss_total = torch.sum(losses + loss_eps * 100)
             optimizerG.zero_grad()
             loss_total.backward()
             optimizerG.step()

@@ -21,6 +21,7 @@ class SurfaceClassifier(nn.Module):
                     1))
                 self.add_module("conv%d" % l, self.filters[l])
         else:
+            print('using skip connections in MLP')
             for l in range(0, len(filter_channels) - 1):
                 if 0 != l:
                     self.filters.append(
@@ -60,9 +61,9 @@ class SurfaceClassifier(nn.Module):
             if i != len(self.filters) - 1:
                 #y = F.leaky_relu(y)
                 ''' Changed to tanh activation function for PINN'''
-                # TODO: sine or GELU activation
+                # TODO: sine of GELU activation
                 y = torch.tanh(y)
-                #y = nn.GELU(y)
+                #y = nn.GELU()(y)
                 #y = torch.sin(y)
 
             if self.num_views > 1 and i == len(self.filters) // 2:

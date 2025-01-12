@@ -30,32 +30,22 @@ def reconstruction(net, cuda, calib_tensor,
                               b_min, b_max, transform=transform)
 
     # Then we define the lambda function for cell evaluation
-    def eval_func(points, time_step, idx):
+    def eval_func(points, time_step):
         points = np.expand_dims(points, axis=0)
         points = np.repeat(points, net.num_views, axis=0)
         samples = torch.from_numpy(points).to(device=cuda).float()
         net.query(samples, calib_tensor, time_step=time_step)
-        #pred = net.get_preds()[0][idx]
         ''' Modification for PINN to allow evaluation of all fields: alpha + u,v,w,p'''
-        pred = net.get_preds_dimensional()[0][idx]
-        #print('idx=(a,u,v,p):', idx ,'pred shape: ', pred.size())
+        pred = net.get_preds_dimensional()[0]
         return pred.detach().cpu().numpy()
 
     # Then we evaluate the grid
     time_log = 'time.txt'
     net_start_time = time.time()
     if use_octree:
-        sdf = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=0)
-        u = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=1)
-        v = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=2)
-        w = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=3)
-        p = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=4)
+        sdf, u, v, w, p = eval_grid_octree(coords, eval_func, num_samples=num_samples, time_step=time_step)
     else:
-        sdf = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=0)
-        u = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=1)
-        v = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=2)
-        w = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=3)
-        p = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step, idx=4)
+        sdf, u, v, w, p  = eval_grid(coords, eval_func, num_samples=num_samples, time_step=time_step)
 
     net_end_time = time.time()
     print('network time: {0}\n'.format(net_end_time - net_start_time))

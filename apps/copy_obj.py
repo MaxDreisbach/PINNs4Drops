@@ -1,5 +1,3 @@
-#from data.config import raw_dataset, render_dataset, archive_dataset, model_list, zip_path
-
 import os
 import glob
 import shutil
@@ -13,7 +11,7 @@ in_path = "../../Blender_droplet_shear_flow/obj/"
 tex_path = "../../PIFu-master/render/tex/droplet0_250_dif_2k.jpg"
 
 ### Ouput dirs
-out_path = "../train_data_DSH2024/GEO/OBJ/"
+out_path = "../train_data_DSH2024A/GEO/OBJ/"
 
 
 def copy_files(in_path,tex_source,subject_name):

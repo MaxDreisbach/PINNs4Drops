@@ -15,6 +15,7 @@ from lib.mesh_util import *
 from lib.sample_util import *
 from lib.train_util import *
 from lib.model import *
+from lib.model.HGPIFuNet_CH import HGPIFuNet_CH
 
 from PIL import Image
 import torchvision.transforms as transforms
@@ -38,6 +39,7 @@ class Evaluator:
 
         # create net
         netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
+        #netG = HGPIFuNet_CH(opt, projection_mode).to(device=cuda)
         print('Using Network: ', netG.name)
 
         if opt.load_netG_checkpoint_path:
@@ -70,6 +72,10 @@ class Evaluator:
         B_MAX = np.array([1, 1, 1])
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
+        ''' PINN: make scale and translation consistent with trainining data '''
+        #projection_matrix = projection_matrix * 0.0072680664 # scale_render / scale_orto / scale_domain: 0.74425/0.4/256=0.0072680664
+        #projection_matrix[3, 3] = 1
+        #projection_matrix[1, 3] = 0.85550058 # 0.74425/0.4/256*117.7 -> translation
         calib = torch.Tensor(projection_matrix).float()
         # Mask
         mask = Image.open(mask_path).convert('L')
@@ -84,7 +90,7 @@ class Evaluator:
         ''' Added time step read in'''
         with open(time_path) as f:
             t = f.readline().strip('\n')
-        time_step = torch.tensor([float(t)])
+        timestep = torch.tensor([float(t)])
 
         return {
             'name': img_name,
@@ -93,10 +99,10 @@ class Evaluator:
             'mask': mask.unsqueeze(0),
             'b_min': B_MIN,
             'b_max': B_MAX,
-            'time_step': time_step
+            'time_step': timestep
         }
 
-    def eval(self, data, use_octree=False, gen_vel_pres=False):
+    def eval(self, data, use_octree=False, gen_vel_pres=False, gen_3D_iso=False):
         '''
         Evaluate a data point
         :param data: a dict containing at least ['name'], ['image'], ['calib'], ['b_min'] and ['b_max'] tensors.
@@ -111,7 +117,7 @@ class Evaluator:
             if self.netC:
                 gen_mesh_color(opt, self.netG, self.netC, self.cuda, data, save_path, use_octree=use_octree)
             else:
-                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree, gen_vel_pres=gen_vel_pres)
+                gen_mesh(opt, self.netG, self.cuda, data, save_path, use_octree=use_octree, gen_vel_pres=gen_vel_pres, gen_3D_iso=gen_3D_iso)
 
 
 if __name__ == '__main__':
@@ -121,7 +127,7 @@ if __name__ == '__main__':
     test_images = [f for f in test_images if ('png' in f or 'jpg' in f) and (not 'mask' in f)]
     #sort and cut list
     test_images.sort()
-    test_images = test_images[9:]
+    #test_images = test_images[300:]
     test_masks = [f[:-4]+'_mask.png' for f in test_images]
     test_time_labels = [f[:-4] + '_time.txt' for f in test_images]
 
@@ -131,7 +137,7 @@ if __name__ == '__main__':
         #try:
         print(image_path, mask_path, time_path)
         data = evaluator.load_image(image_path, mask_path, time_path)
-        evaluator.eval(data, True, True)
+        evaluator.eval(data, use_octree=False, gen_vel_pres=True, gen_3D_iso=False)
         #except Exception as e:
         #    print("error:", e.args)
 

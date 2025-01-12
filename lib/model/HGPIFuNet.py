@@ -10,6 +10,7 @@ from torch.autograd import grad
 from .BasePIFuNet import BasePIFuNet
 from .SurfaceClassifier import SurfaceClassifier
 from .SurfaceClassifier_LAAF import SurfaceClassifier_LAAF
+from .SurfaceClassifier_LAAF_FF import SurfaceClassifier_LAAF_FF
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
@@ -68,6 +69,7 @@ class HGPIFuNet(BasePIFuNet):
 
         # for PINN (u,v,w,p) data loss term
         self.n_data = self.opt.n_data
+        self.n_residual = self.opt.n_residual
         self.num_views = self.opt.num_views
 
         self.image_filter = HGFilter(opt)
@@ -78,20 +80,25 @@ class HGPIFuNet(BasePIFuNet):
                     parameter.requires_grad = False
 
 
-        if not opt.use_cond_MLP:
-            print('Using standard MLP architecture from PIFuNet')
-            self.surface_classifier = SurfaceClassifier(
-                filter_channels=self.opt.mlp_dim,
-                num_views=self.opt.num_views,
-                no_residual=self.opt.no_residual,
-                last_op=nn.Sigmoid())
-        else:
+        if not opt.use_FF:
             print('Using layer-wise adaptive activation functions PIFuNet')
             self.surface_classifier = SurfaceClassifier_LAAF(
                 filter_channels=self.opt.mlp_dim,
                 num_views=self.opt.num_views,
                 no_residual=self.opt.no_residual,
-                last_op=nn.Sigmoid())
+                last_op=nn.Sigmoid(),
+                LAAF_scale=2.0)
+        else:
+            print('Using Fourier features & layer-wise adaptive activation functions PIFuNet')
+            self.surface_classifier = SurfaceClassifier_LAAF_FF(
+                filter_channels=self.opt.mlp_dim_FF,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid(),
+                LAAF_scale=2.0,
+                num_dims=3,
+                encoding_dim=128,
+                encoding_scale=10)
 
         self.normalizer = DepthNormalizer(opt)
 
@@ -149,7 +156,7 @@ class HGPIFuNet(BasePIFuNet):
             if grads is None:
                 print('bad grad')
                 return torch.tensor(0.)
-        return grads[:, :, self.n_data:]
+        return grads[:, :, self.n_data*2:]
 
     def diff_xyz_de_norm(self, data):
         return data / (self.xmax - self.xmin)
@@ -195,7 +202,7 @@ class HGPIFuNet(BasePIFuNet):
         if not self.training:
             self.im_feat_list = [self.im_feat_list[-1]]
 
-    def query(self, points, calibs, transforms=None, labels=None, labels_u=None, labels_v=None, labels_w=None,
+    def query(self, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None, labels_v=None, labels_w=None,
               labels_p=None, time_step=None):
         '''
         Given 3D points, query the network predictions for each point.
@@ -212,6 +219,9 @@ class HGPIFuNet(BasePIFuNet):
         :param labels_p: Optional [B, Res, N] gt pressure field labeling
         :return: [B, Res, N] predictions for each point
         '''
+        # collect sampling points for joint prediction -> later separated (after prediction) for loss computation
+        if uvwp_points is not None:
+            points = torch.cat([points, uvwp_points, residual_points], 2)
 
         if labels is not None:
             self.labels = labels
@@ -297,7 +307,7 @@ class HGPIFuNet(BasePIFuNet):
 
     def get_solid_domain_mask(self, points):
         ground_mask = torch.zeros_like(points[:, :1, :])
-        for i in range(self.opt.num_sample_inout):
+        for i in range(points.shape[-1]):
             if points[:, 1, i] >= self.y_ground:
                 ground_mask[:, :, i] = 1
             else:
@@ -336,20 +346,25 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Calculates MSE-loss of velocity data sampling points
         '''
-        if self.n_data >= self.pred.size(dim=2):
-            self.n_data = self.pred.size(dim=2)
+        if points is not None:
+            n_start = self.n_data
+            n_end = self.n_data * 2
 
-        # get prediction for observation points
-        pred_u = self.pred[:, 1, :self.n_data]
-        pred_v = self.pred[:, 2, :self.n_data]
-        pred_w = self.pred[:, 3, :self.n_data]
+            # get prediction for observation points
+            pred_u = self.pred[:, 1, n_start:n_end]
+            pred_v = self.pred[:, 2, n_start:n_end]
+            pred_w = self.pred[:, 3, n_start:n_end]
 
-        # Do not calculate loss for sample points below surface in solid domain and within grooves
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_data]
-        error_u = self.error_term(pred_u * mask, self.labels_u * mask)
-        error_v = self.error_term(pred_v * mask, self.labels_v * mask)
-        error_w = self.error_term(pred_w * mask, self.labels_w * mask)
+            # Do not calculate loss for sample points below surface in solid domain and within grooves
+            mask = self.get_solid_domain_mask(points)
+            #mask = ground_mask[:, :, n_start:n_end]
+            error_u = self.error_term(pred_u * mask, self.labels_u * mask)
+            error_v = self.error_term(pred_v * mask, self.labels_v * mask)
+            error_w = self.error_term(pred_w * mask, self.labels_w * mask)
+        else:
+            error_u = 0
+            error_v = 0
+            error_w = 0
 
         return error_u, error_v, error_w
 
@@ -358,14 +373,16 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Calculates MSE-loss of pressure data sampling points
         '''
-        if self.n_data >= self.pred.size(dim=2):
-            self.n_data = self.pred.size(dim=2)
+        if points is not None:
+            n_start = self.n_data
+            n_end = self.n_data * 2
 
-        # get prediction for observation points
-        pred_p = self.pred[:, 4, :self.n_data]
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_data]
-        error_p = self.error_term(pred_p * mask, self.labels_p * mask)
+            # get prediction for observation points
+            pred_p = self.pred[:, 4, n_start:n_end]
+            mask = self.get_solid_domain_mask(points)
+            error_p = self.error_term(pred_p * mask, self.labels_p * mask)
+        else:
+            error_p = 0
 
         return error_p
 
@@ -409,12 +426,15 @@ class HGPIFuNet(BasePIFuNet):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
+
+        n_start = self.n_data * 2
+
         # get prediction for collocation points
-        alpha = self.preds[0, 0, self.n_data:]  # preds instead of pred to get masking of alpha
-        u = self.pred[0, 1, self.n_data:]
-        v = self.pred[0, 2, self.n_data:]
-        w = self.pred[0, 3, self.n_data:]
-        p = self.pred[0, 4, self.n_data:]
+        alpha = self.preds[0, 0, n_start:]  # preds instead of pred to get masking of alpha
+        u = self.pred[0, 1, n_start:]
+        v = self.pred[0, 2, n_start:]
+        w = self.pred[0, 3, n_start:]
+        p = self.pred[0, 4, n_start:]
 
         # get de-normed dimensionless quantities
         u = de_norm(u, self.umin, self.umax)
@@ -495,7 +515,6 @@ class HGPIFuNet(BasePIFuNet):
         f_sigma_y = one_We * curvature * alpha_y
         f_sigma_z = one_We * curvature * alpha_z
 
-
         '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 
         to zero, as they yield in a term that is equal to the interface advection equation (similarly terms drop out 
@@ -532,8 +551,7 @@ class HGPIFuNet(BasePIFuNet):
         res_conti = u_x + v_y + w_z
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, self.n_data:]
+        mask = self.get_solid_domain_mask(points)
         # zero_residual_points = (ground_mask == 0).sum()
         # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
         res_momentum_x = res_momentum_x * mask
@@ -567,13 +585,13 @@ class HGPIFuNet(BasePIFuNet):
 
         return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z
 
-    def forward(self, images, points, calibs, transforms=None, labels=None, labels_u=None,
+    def forward(self, images, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None,
                 labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
         # Get image feature
         self.filter(images)
 
         # Phase 2: point query
-        self.query(points=points, calibs=calibs, transforms=transforms, labels=labels, labels_u=labels_u,
+        self.query(points=points, calibs=calibs, transforms=transforms, labels=labels, uvwp_points=uvwp_points, residual_points=residual_points, labels_u=labels_u,
                    labels_v=labels_v, labels_w=labels_w, labels_p=labels_p, time_step=time_step)
 
         # get the prediction
@@ -582,12 +600,12 @@ class HGPIFuNet(BasePIFuNet):
 
         # get the data loss for alpha, (u,w,w) velocity components and pressure
         loss_data_alpha = self.get_error()
-        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
-        loss_data_p = self.get_pressure_loss(points=points)
+        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=uvwp_points)
+        loss_data_p = self.get_pressure_loss(points=uvwp_points)
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
-            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=points)
+            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=residual_points)
         else:
             loss_conti = loss_data_alpha * 0
             loss_phase_conv = loss_data_alpha * 0

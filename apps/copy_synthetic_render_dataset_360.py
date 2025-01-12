@@ -1,5 +1,3 @@
-#from data.config import raw_dataset, render_dataset, archive_dataset, model_list, zip_path
-
 import os
 import glob
 import shutil
@@ -8,11 +6,11 @@ import time
 
 ### Input dirs
 # synthetic renders from blender
-in_path = "../../PIFu-master/train_data_DFS2023C/GEO/OBJ/"
-render_path = "../../Blender_96_3/denoised/"
+in_path = "./train_data_DSH2024A/GEO/OBJ/"
+render_path = "../Blender_droplet_shear_flow/denoised/"
 
 ### Ouput dirs
-train_path = "../train_data_DFS2024A/RENDER/"
+train_path = "./train_data_DSH2024A/RENDER/"
 
 ### Starting mesh
 START = 0

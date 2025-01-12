@@ -6,10 +6,14 @@ import shutil
 import fnmatch
 from os import walk
 
+'''
+python -m extract_timestep_test_data.py
+'''
+
 ### Input dirs
-in_path = "/net/istmhome/users/hi227/Data/17112023_water_PDMS/Preprocessed/17112023_water_PDMS_SMG3_5_C001H001S0001_preprocessed/"
+in_path = "../experiments/PDMS_0s3_PINN_B/"
 impact_frame = 0
-FPS = 7500
+FPS = 8000 #7500
 
 # Load in the time step paths
 filenames = []

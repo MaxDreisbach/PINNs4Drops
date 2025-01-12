@@ -281,6 +281,17 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         self.intermediate_preds_list = []
 
+        ''' DEBUG: '''
+        #torch.set_printoptions(precision=8)
+        #print('calibs: ', calibs)
+        #print('points x mean: ', points[:, 0, :].mean().item(), 'max: ', points[:, 0, :].max().item(), 'min: ', points[:, 0, :].min().item())
+        #print('points y mean: ', points[:, 1, :].mean().item(), 'max: ', points[:, 1, :].max().item(), 'min: ', points[:, 1, :].min().item())
+        #print('points z mean: ', points[:, 2, :].mean().item(), 'max: ', points[:, 2, :].max().item(), 'min: ', points[:, 2, :].min().item())
+        #print('x mean: ', self.x_feat.mean().item(), 'max: ', self.x_feat.max().item(), 'min: ', self.x_feat.min().item())
+        #print('y mean: ', self.y_feat.mean().item(), 'max: ', self.y_feat.max().item(), 'min: ', self.y_feat.min().item())
+        #print('z mean: ', self.z_feat.mean().item(), 'max: ', self.z_feat.max().item(), 'min: ', self.z_feat.min().item())
+        #print('t mean: ', self.t.mean().item(), 'max: ', self.t.max().item(), 'min: ', self.t.min().item())
+
         for im_feat in self.im_feat_list:
             # plot_im_feat(im_feat)
             image_feature = self.index(im_feat, xy)
@@ -507,22 +518,17 @@ class HGPIFuNet_CH(BasePIFuNet):
         lambda_CH = (3 * np.sqrt(2) / 4) * self.sigma * self.epsilon
         # chemical potential
         phi = (lambda_CH / self.epsilon ** 2) * C * (C ** 2 - 1) - lambda_CH * laplacian_C
-        # print('phi: ', torch.mean(phi).item())
+        print('phi field mean: ', phi.mean().item(), 'max: ', phi.max().item(), 'min: ', phi.min().item())
 
         phi_xx = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.x, n=2))
         phi_yy = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.y, n=2))
         phi_zz = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.z, n=2))
-        # print('phi_zz: ', torch.mean(phi_zz).item())
-        # print('phi_yy: ', torch.mean(phi_yy).item())
         laplacian_phi = phi_xx + phi_yy + phi_zz
 
         # surface tension (sigma already contained in phi -> division)
         f_sigma_x = (one_We / self.sigma) * phi * C_x
         f_sigma_y = (one_We / self.sigma) * phi * C_y
         f_sigma_z = (one_We / self.sigma) * phi * C_z
-        # print('f_sigma_x: ', torch.mean(f_sigma_x).item())
-        # print('f_sigma_y: ', torch.mean(f_sigma_y).item())
-        # print('f_sigma_z: ', torch.mean(f_sigma_z).item())
 
         '''two-phase flow single-field Navier stokes equations in the phase intensive-form are considered here (see 
         Marschall 2011, pp 121ff) - The derivatives of the phase field in the unsteady and convective term result 
@@ -631,5 +637,6 @@ class HGPIFuNet_CH(BasePIFuNet):
             loss_momentum_x = loss_data_alpha * 0
             loss_momentum_y = loss_data_alpha * 0
             loss_momentum_z = loss_data_alpha * 0
+            return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z
 
         return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, self.epsilon
