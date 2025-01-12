@@ -422,7 +422,7 @@ class HGPIFuNet(BasePIFuNet):
         return faulty_grad
 
 
-    def get_pde_loss(self, points):
+    def get_pde_loss(self, points, magnification):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
@@ -444,6 +444,9 @@ class HGPIFuNet(BasePIFuNet):
         #print('v field mean: ', v.mean().item(), 'max: ', v.max().item(), 'min: ', v.min().item())
         #print('u field mean: ', u.mean().item(), 'max: ', u.max().item(), 'min: ', u.min().item())
         #print('p field mean: ', p.mean().item(), 'max: ', p.max().item(), 'min: ', p.min().item())
+
+        # Scale characteristic length by image magnification (for physically correct curvature and surface tension calculation)
+        self.L_ref = self.L_ref / magnification
 
         # derivatives
         alpha_t = self.diff_t_de_norm(self.nth_derivative(alpha, wrt=self.t, n=1))
@@ -586,7 +589,7 @@ class HGPIFuNet(BasePIFuNet):
         return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z
 
     def forward(self, images, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None,
-                labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
+                labels_v=None, labels_w=None, labels_p=None, time_step=None, magnification=None, get_PINN_loss=True):
         # Get image feature
         self.filter(images)
 
@@ -605,7 +608,7 @@ class HGPIFuNet(BasePIFuNet):
 
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
-            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=residual_points)
+            loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = self.get_pde_loss(points=residual_points, magnification=magnification)
         else:
             loss_conti = loss_data_alpha * 0
             loss_phase_conv = loss_data_alpha * 0

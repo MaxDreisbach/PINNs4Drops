@@ -79,6 +79,7 @@ class TrainDataset(Dataset):
         # for PINN (u,v,w,p) data loss term
         self.n_data = self.opt.n_data
         self.n_residual = self.opt.n_residual
+        self.small_data_partition = self.opt.small_data_partition
 
         self.num_views = self.opt.num_views
 
@@ -111,8 +112,15 @@ class TrainDataset(Dataset):
 
     def get_subjects(self):
         all_subjects = os.listdir(self.RENDER)
-        val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
-        test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
+        if self.small_data_partition:
+            print('training on small data partition')
+            val_subjects = np.loadtxt(os.path.join(self.root, 'train_val_split_small/val.txt'), dtype=str)
+            test_subjects = np.loadtxt(os.path.join(self.root, 'train_val_split_small/test.txt'), dtype=str)
+        else:
+            print('training on full dataset')
+            val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
+            test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
+
         if len(val_subjects) == 0:
             return sorted(list(set(all_subjects) - set(test_subjects)))
 
@@ -188,6 +196,7 @@ class TrainDataset(Dataset):
 
             mask = Image.open(mask_path).convert('L')
             render = Image.open(render_path).convert('RGB')
+            magnification = 1.0
 
             if self.is_train:
                 # Pad images
@@ -207,6 +216,8 @@ class TrainDataset(Dataset):
                 # random scale
                 if self.opt.random_scale:
                     rand_scale = random.uniform(0.9, 1.1)
+                    magnification = int(rand_scale * w) / w
+                    #print('magnification: ', magnification)
                     w = int(rand_scale * w)
                     h = int(rand_scale * h)
                     render = render.resize((w, h), Image.BILINEAR)
@@ -259,7 +270,8 @@ class TrainDataset(Dataset):
             'img': torch.stack(render_list, dim=0),
             'calib': torch.stack(calib_list, dim=0),
             'extrinsic': torch.stack(extrinsic_list, dim=0),
-            'mask': torch.stack(mask_list, dim=0)
+            'mask': torch.stack(mask_list, dim=0),
+            'magnification': torch.tensor([float(magnification)])
         }
 
 
@@ -357,6 +369,7 @@ class TrainDataset(Dataset):
         labels_v_dimless = labels_v_r / U_ref
         labels_w_dimless = labels_w_r / U_ref
         labels_p_dimless = labels_p / (rho_ref * U_ref**2)
+        #TODO: Consider magnification for characteristic time?
         timestep_dimless = timestep / (L_ref / U_ref)
 
 

@@ -107,6 +107,7 @@ class BaseOptions():
 
         parser.add_argument('--n_data', default=1500, type=int, help='number of observation points for data loss')
         parser.add_argument('--n_residual', default=15000, type=int, help='number of observation points for data loss')
+        parser.add_argument('--small_data_partition', default=False, type=bool, help='use smaller partition of dataset for training')
 
         # for train
         parser.add_argument('--random_flip', action='store_true', help='if random flip')
