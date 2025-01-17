@@ -196,7 +196,6 @@ class TrainDataset(Dataset):
 
             mask = Image.open(mask_path).convert('L')
             render = Image.open(render_path).convert('RGB')
-            magnification = 1.0
 
             if self.is_train:
                 # Pad images
@@ -216,8 +215,6 @@ class TrainDataset(Dataset):
                 # random scale
                 if self.opt.random_scale:
                     rand_scale = random.uniform(0.9, 1.1)
-                    magnification = int(rand_scale * w) / w
-                    #print('magnification: ', magnification)
                     w = int(rand_scale * w)
                     h = int(rand_scale * h)
                     render = render.resize((w, h), Image.BILINEAR)
@@ -270,8 +267,7 @@ class TrainDataset(Dataset):
             'img': torch.stack(render_list, dim=0),
             'calib': torch.stack(calib_list, dim=0),
             'extrinsic': torch.stack(extrinsic_list, dim=0),
-            'mask': torch.stack(mask_list, dim=0),
-            'magnification': torch.tensor([float(magnification)])
+            'mask': torch.stack(mask_list, dim=0)
         }
 
 
@@ -369,7 +365,6 @@ class TrainDataset(Dataset):
         labels_v_dimless = labels_v_r / U_ref
         labels_w_dimless = labels_w_r / U_ref
         labels_p_dimless = labels_p / (rho_ref * U_ref**2)
-        #TODO: Consider magnification for characteristic time?
         timestep_dimless = timestep / (L_ref / U_ref)
 
 

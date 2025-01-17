@@ -136,12 +136,10 @@ def train(opt):
             label_tensor_w = train_data['labels_w'].to(device=cuda)
             label_tensor_p = train_data['labels_p'].to(device=cuda)
 
-            magnification = train_data['magnification'].to(device=cuda)
-
             iter_data_time = time.time()
             res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = netG.forward(
                 image_tensor, sample_tensor, calib_tensor, labels=label_tensor, uvwp_points=sample_tensor_uvwp, residual_points=sample_tensor_residual, labels_u=label_tensor_u,
-                labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, magnification=magnification,
+                labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label,
                 get_PINN_loss=True)
 
 

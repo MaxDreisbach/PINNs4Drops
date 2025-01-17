@@ -40,9 +40,9 @@ commands = []
 for i,epoch in enumerate(epochs):
 
   if args.LAAF:
-      command = base_command + ' --gpu_id ' + str(args.GPU_ID) + ' --batch_size ' + str(args.num_files) +' --dataroot ' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ./checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i) + ' --RGB True ' + '--n_data 5000 '
+      command = base_command + ' --gpu_id ' + str(args.GPU_ID) + ' --batch_size ' + str(args.num_files) +' --dataroot ' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ./checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i) + ' --RGB True ' + '--n_data 15000 '
   else:
-      command = base_command + ' --gpu_id ' + str(args.GPU_ID) + ' --batch_size ' + str(args.num_files) +' --dataroot ' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ./checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i) + ' --RGB True ' + '--n_data 5000 '
+      command = base_command + ' --gpu_id ' + str(args.GPU_ID) + ' --batch_size ' + str(args.num_files) +' --dataroot ' + args.data_folder + ' --name ' + args.file_dir + ' --load_netG_checkpoint_path ./checkpoints/' + args.file_dir + '/netG_epoch_' + str(i) + ' --resume_epoch ' + str(i) + ' --RGB True ' + '--n_data 15000 '
   
   print(command)
   commands.append(command)

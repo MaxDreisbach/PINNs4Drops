@@ -217,9 +217,10 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
         Erel_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_uvp_error_rel_1.txt')
         Eabs_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_uvp_error_abs_1.txt')
         for idx in range(num_tests):
-            idx = 5
-            #data = dataset[idx * len(dataset) // num_tests]
-            data = dataset[idx]
+            data = dataset[idx * len(dataset) // num_tests]
+            # idx = 5
+            #data = dataset[idx]
+
             # retrieve the data
             name = data['name']
             print('Processing:', name)
@@ -241,13 +242,12 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
             label_tensor_p = data['labels_p'].to(device=cuda).unsqueeze(0)
             time_step_label = data['time_step'].to(device=cuda)
 
-            magnification = data['magnification'].to(device=cuda)
-
             res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z = net.forward(image_tensor, sample_tensor, calib_tensor, labels=label_tensor, uvwp_points=sample_tensor_uvwp, residual_points=sample_tensor_residual, labels_u=label_tensor_u,
-                   labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, magnification=magnification, get_PINN_loss=False)
+                   labels_v=label_tensor_v, labels_w=label_tensor_w, labels_p=label_tensor_p, time_step=time_step_label, get_PINN_loss=False)
                    
 
             loss = loss_data_alpha + loss_data_u + loss_data_v + loss_data_w + loss_data_p + loss_conti + loss_phase_conv + loss_momentum_x + loss_momentum_z + loss_momentum_z
+
             IOU, prec, recall = compute_acc(res[:, :, :opt.n_data], label_tensor)
 
             labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w,
