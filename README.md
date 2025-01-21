@@ -70,8 +70,8 @@ python -m apps.eval_IOU --dataroot ./train_data_DS2022 --gpu_id 1 --load_netG_ch
 ## Related Research
 - This code is based on "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization" by Saito et al. (2019) \
 (see https://github.com/shunsukesaito/PIFu)
-- Qiu et al. (2022)
-- Buhendwa et al. (2021)
+- "Physics-informed neural networks for phase-field method in two-phase flow" Qiu et al. (2022)
+- "Inferring incompressible two-phase flow fields from the interface motion using physics-informed neural networks" Buhendwa et al. (2021)
 
 
 
