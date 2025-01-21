@@ -12,6 +12,38 @@ The datasets used in this work, as well as the weights of the trained PINNs are 
 If you have any questions regarding this code, please feel free to contact Maximilian (maximilian.dreisbach@kit.edu).
 
 
+## Requirements
+- Python 3 (required packages below)
+- PyTorch
+- json
+- PIL
+- skimage
+- tqdm
+- numpy
+- cv2
+- matplotlib
+
+for training and data generation
+- trimesh with pyembree
+- pyexr
+- PyOpenGL
+- freeglut
+
+## Tested for: 
+(see requirements.txt)
+
+## Getting Started
+- Create conda environment from requirements.txt (conda create --name <env> --file requirements.txt)
+- Download pre-processed glare-point shadowgraphy images from https://doi.org/10.35097/egqrfznmr9yp2s7f
+- OR use processing scripts on own data (see https://github.com/MaxDreisbach/GPS-Processing)
+- Download network weights and create checkpoints folder
+- OR train the network on new data (see below)
+- Run eval.py
+- Open .obj file of reconstructed interface in Meshlab, Blender, or any 3D visualization software 
+
+### Evaluation
+
+python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {} --load_netG_checkpoint_path {path to network weights}
 
 
 # Training the network #
@@ -35,6 +67,11 @@ python -m apps.eval_IOU --dataroot ./train_data_DF2022 --gpu_id 1 --load_netG_ch
 python -m apps.eval_IOU --dataroot ./train_data_DS2022 --gpu_id 1 --load_netG_checkpoint_path ./checkpoints/example/netG_epoch_4 --batch_size 1 --num_gen_mesh_test 100 --name DS2022_train_val --no_num_eval --num_sample_inout 1
 
 
+## Related Research
+- This code is based on "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization" by Saito et al. (2019) \
+(see https://github.com/shunsukesaito/PIFu)
+- Qiu et al. (2022)
+- Buhendwa et al. (2021)
 
 
 
