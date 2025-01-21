@@ -43,7 +43,7 @@ for training and data generation
 
 ### Evaluation
 
-python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {} --load_netG_checkpoint_path {path to network weights}
+python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}
 
 
 # Training the network #
