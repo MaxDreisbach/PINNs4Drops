@@ -1,5 +1,7 @@
 # PINNs4Drops: Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows
 
+[![Preprint](https://img.shields.io/badge/arxiv-preprint-blue)](https://arxiv.org/abs/2411.15949)
+
 by Maximilian Dreisbach (Institute of Fluid Mechanics (ISTM) - Karlsruhe Institute of Technology (KIT))
 and Elham Kiyani (Division of Applied Mathematics - Brown University)
 
