@@ -112,8 +112,9 @@ python -m apps.eval_IOU --dataroot ./train_data_DF2022 --gpu_id 1 --load_netG_ch
 ### From PIFu4 environment:
 python -m apps.eval_IOU --dataroot ./train_data_DS2022 --gpu_id 1 --load_netG_checkpoint_path ./checkpoints/example/netG_epoch_4 --batch_size 1 --num_gen_mesh_test 100 --name DS2022_train_val --no_num_eval --num_sample_inout 1
 
-If you find the code useful in your research, please consider citing the paper. 
-@misc{Dreisbach2024PINNs4Drops,
+If you find the code useful in your research, please consider citing the paper.
+
+@InProceedings{Dreisbach2024PINNs4Drops,
     title={{PINNs4Drops}: Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows}, 
     author={Maximilian Dreisbach and Elham Kiyani and Jochen Kriegseis and George Karniadakis and Alexander Stroh},
     year={2024},
