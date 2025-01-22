@@ -6,7 +6,7 @@ and Elham Kiyani (Division of Applied Mathematics - Brown University)
 This code allows the evalution and training of the physics-informed neural networks for spatio-temporal gas-liquid interface reconstruction in two-phase flows as presented 
 in our article "Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows".
 
-The datasets used in this work, as well as the weights of the trained PINNs are available on [KITopen](https://doi.org/10.35097/egqrfznmr9yp2s7f)
+The datasets used in this work, as well as the weights of the trained PINNs are available on [KITopen](https://doi.org/10.35097/mmnxkbqqeye8p5tx)
 
 If you have any questions regarding this code, please feel free to contact Maximilian (maximilian.dreisbach@kit.edu).
 
@@ -32,9 +32,9 @@ for training and data generation
 
 ## Getting Started
 - Create conda environment from requirements.txt (`conda create --name <env> --file requirements.txt`)
-- Download pre-processed glare-point shadowgraphy images from [KITopen](https://doi.org/10.35097/egqrfznmr9yp2s7f)
+- Download pre-processed glare-point shadowgraphy images from [KITopen](https://doi.org/10.35097/mmnxkbqqeye8p5tx)
 - OR use processing scripts on own data (see [GPS-Processing GitHub](https://github.com/MaxDreisbach/GPS-Processing))
-- Download network weights and move it to `./PINNs4Drops/checkpoints/`
+- Download network weights and move the file to `./PINNs4Drops/checkpoints/`
 - OR train the network on new data (see below)
 - Run eval.py for volumetric reconstruction (see below)
 - Open .obj file of reconstructed interface in Meshlab, Blender, or any 3D visualization software 
