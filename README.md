@@ -43,7 +43,10 @@ for training and data generation
 
 ## Evaluation
 This script reconstructs the 3D gas-liquid interface, as well as the 3D pressure distribution and the three components of the velocity vector for each time step.
-The reconstruction requires each an image in `path_to_processed_image_data` and `.txt` containing a decimal number that indicates the physical time.
+The reconstruction requires for each time step an image in `path_to_processed_image_data` and `.txt` containing a decimal number that indicates the physical time.
+
+Run `python -m apps.extract_timestep_test_data.py` to generate time step labels for new datasets
+
 The reconstruction results are saved under `./PIFu/results/name_of_experiment` and contain an `.obj` file representing the 3D gas-liquid interface and `.obj` files containing the inferred velocity and pressure fields.
 Additional plotting 2D slices of the predicted fields maybe be activated in `./lib/train_util/`. Further plotting options can be adjusted in `./lib/plotting/`. \
 The resolution of the reconstruction can be controlled with the flag `--resolution {res}`, with a default value of 512.
@@ -73,6 +76,7 @@ python -m apps.render_data_batch
 ```
 3. Run the synthetic training data generation in Blender (see [Render-GPS GitHub](https://github.com/MaxDreisbach/RenderGPS))
 4. Copy the renderings from the Blender output folder into the `RENDER` folder
+5. Extract ground truth labels for the velocity components and pressure  
 
 ## Training (Linux Only)
 The following code should be run with [pyembree](https://github.com/scopatz/pyembree), as it is otherwise very slow. 
