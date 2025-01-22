@@ -5,7 +5,7 @@
 by Maximilian Dreisbach (Institute of Fluid Mechanics (ISTM) - Karlsruhe Institute of Technology (KIT))
 and Elham Kiyani (Division of Applied Mathematics - Brown University)
 
-[![Graphical Abstract](assets/GA.PNG)](https://arxiv.org/abs/2411.15949)
+[![Graphical Abstract](assets/Graphical_abstract.png)](https://arxiv.org/abs/2411.15949)
 
 This code allows the evalution and training of the physics-informed neural networks for spatio-temporal gas-liquid interface reconstruction in two-phase flows as presented 
 in our article ["Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows"](https://arxiv.org/abs/2411.15949).
