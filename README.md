@@ -88,14 +88,11 @@ python -m apps.extract_timestep_dataset
 ## Training (Linux Only)
 The following code should be run with [pyembree](https://github.com/scopatz/pyembree), as it is otherwise very slow. 
 
-Run the following script to train the reconstruction network. The intermediate checkpoints are saved under `./checkpoints`. You can add `--batch_size` and `--num_sample_input` flags to adjust the batch size and the number of sampled points based on available GPU memory. The flags `--random_scale` and `--random_trans` enable data augmentation and perform random scaling and random cropping with translation of the input images.
+Run the following script to train the VOF-PINNs. The intermediate checkpoints are saved under `./checkpoints`. You can add `--n_data` and `--n_residual` flags to adjust the number of sampling points for the data loss and residual loss calculation based on available GPU memory. The flags `--random_scale` and `--random_trans` enable data augmentation and perform random scaling and random cropping with translation of the input images. The options for the weights of the different loss terms and other hyperparameters can be set in `./lib/options/` and can be added as flags.
 ```
-python -m apps.train_shape --dataroot {path_to_training_data} --random_scale --random_trans
+python -m apps.train_shape --dataroot {path_to_training_data} --name {name_of_the_model} --random_scale --random_trans
 ```
 
-
-# Training the network #
-python -m apps.train_shape --dataroot ../PIFu-master/train_data_DFS2023C --name DFS2024D-PINN --num_epoch 8 --batch_size 1 --no_gen_mesh --gpu_id 1 --w_vel 1 --w_pres 1 --w_conti 10 --w_phase 10 --w_nse 1 --n_vel_pres_data 5000
 
 # Evaluation #
 ### Plot predicted fields
