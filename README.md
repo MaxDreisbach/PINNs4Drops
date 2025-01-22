@@ -45,12 +45,16 @@ for training and data generation
 This script reconstructs the 3D gas-liquid interface, as well as the 3D pressure distribution and the three components of the velocity vector for each time step.
 The reconstruction requires each an image in `path_to_processed_image_data` and `.txt` containing a decimal number that indicates the physical time.
 The reconstruction results are saved under `./PIFu/results/name_of_experiment` and contain an `.obj` file representing the 3D gas-liquid interface and `.obj` files containing the inferred velocity and pressure fields.
-Additional plotting 2D slices of the predicted fields maybe be activated in `./lib/train_util/`. Further plotting options can be adjusted in `./lib/plotting/`.
+Additional plotting 2D slices of the predicted fields maybe be activated in `./lib/train_util/`. Further plotting options can be adjusted in `./lib/plotting/`. \
+The resolution of the reconstruction can be controlled with the flag `--resolution {res}`, with a default value of 512.
 
 `python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
 
+For the evaluation of PF-PINNsv1 run 
+`python -m apps.eval_CH --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
 
-
+For the evaluation of PF-PINNsv2 run 
+`python -m apps.eval_CH2 --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
 
 ## Data Generation (Linux Only)
 The data generation uses codes adapted from PIFu by Saito et al. (2019), see [PIFu GitHub](https://github.com/shunsukesaito/PIFu) for further reference.
@@ -80,7 +84,6 @@ python -m apps.train_shape --dataroot {path_to_training_data} --random_scale --r
 
 
 # Training the network #
-### From PIFuT environment:
 python -m apps.train_shape --dataroot ../PIFu-master/train_data_DFS2023C --name DFS2024D-PINN --num_epoch 8 --batch_size 1 --no_gen_mesh --gpu_id 1 --w_vel 1 --w_pres 1 --w_conti 10 --w_phase 10 --w_nse 1 --n_vel_pres_data 5000
 
 # Evaluation #
