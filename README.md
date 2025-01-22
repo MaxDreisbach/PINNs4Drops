@@ -114,7 +114,8 @@ python -m apps.eval_IOU --dataroot ./train_data_DS2022 --gpu_id 1 --load_netG_ch
 
 If you find the code useful in your research, please consider citing the paper.
 
-@InProceedings{Dreisbach2024PINNs4Drops,
+```
+@misc{Dreisbach2024PINNs4Drops,
     title={{PINNs4Drops}: Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows}, 
     author={Maximilian Dreisbach and Elham Kiyani and Jochen Kriegseis and George Karniadakis and Alexander Stroh},
     year={2024},
@@ -124,6 +125,7 @@ If you find the code useful in your research, please consider citing the paper.
     url={https://arxiv.org/abs/2411.15949}, 
     note={\href{https://arxiv.org/abs/2411.15949}{arXiv:2411.15949}}
 }
+```
 
 ## Related Research
 - This code is based on "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization" by Saito et al. (2019) \
