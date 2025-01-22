@@ -5,8 +5,10 @@
 by Maximilian Dreisbach (Institute of Fluid Mechanics (ISTM) - Karlsruhe Institute of Technology (KIT))
 and Elham Kiyani (Division of Applied Mathematics - Brown University)
 
+[![Graphical Abstract](assets/GA.PNG)](https://arxiv.org/abs/2411.15949)
+
 This code allows the evalution and training of the physics-informed neural networks for spatio-temporal gas-liquid interface reconstruction in two-phase flows as presented 
-in our article "Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows".
+in our article ["Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows"](https://arxiv.org/abs/2411.15949).
 
 The datasets used in this work, as well as the weights of the trained PINNs are available on [KITopen](https://doi.org/10.35097/mmnxkbqqeye8p5tx)
 
@@ -110,6 +112,17 @@ python -m apps.eval_IOU --dataroot ./train_data_DF2022 --gpu_id 1 --load_netG_ch
 ### From PIFu4 environment:
 python -m apps.eval_IOU --dataroot ./train_data_DS2022 --gpu_id 1 --load_netG_checkpoint_path ./checkpoints/example/netG_epoch_4 --batch_size 1 --num_gen_mesh_test 100 --name DS2022_train_val --no_num_eval --num_sample_inout 1
 
+If you find the code useful in your research, please consider citing the paper. 
+@misc{Dreisbach2024PINNs4Drops,
+    title={{PINNs4Drops}: Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows}, 
+    author={Maximilian Dreisbach and Elham Kiyani and Jochen Kriegseis and George Karniadakis and Alexander Stroh},
+    year={2024},
+    eprint={2411.15949},
+    archivePrefix={arXiv},
+    primaryClass={physics.flu-dyn},
+    url={https://arxiv.org/abs/2411.15949}, 
+    note={\href{https://arxiv.org/abs/2411.15949}{arXiv:2411.15949}}
+}
 
 ## Related Research
 - This code is based on "PIFu: Pixel-Aligned Implicit Function for High-Resolution Clothed Human Digitization" by Saito et al. (2019) \
