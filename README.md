@@ -42,7 +42,10 @@ for training and data generation
 - Open .obj file of reconstructed interface in Meshlab, Blender, or any 3D visualization software 
 
 ## Evaluation
-This script reconstructs each image in `path_to_processed_image_data` into an `.obj` file representing the 3D gas-liquid interface and saves it under `./PIFu/results/name_of_experiment`.
+This script reconstructs the 3D gas-liquid interface, as well as the 3D pressure distribution and the three components of the velocity vector for each time step.
+The reconstruction requires each an image in `path_to_processed_image_data` and `.txt` containing a decimal number that indicates the physical time.
+The reconstruction results are saved under `./PIFu/results/name_of_experiment` and contain an `.obj` file representing the 3D gas-liquid interface and `.obj` files containing the inferred velocity and pressure fields.
+Additional plotting 2D slices of the predicted fields maybe be activated in `./lib/train_util/`. Further plotting options can be adjusted in `./lib/plotting/`.
 
 `python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
 
