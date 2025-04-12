@@ -11,9 +11,9 @@ python -m extract_timestep_test_data.py
 '''
 
 ### Input dirs
-in_path = "../experiments/PDMS_0s3_PINN_B/"
+in_path = "../experiments/FDM_90_PINN/"
 impact_frame = 0
-FPS = 8000 #7500
+FPS = 7500 #7500, 8000
 
 # Load in the time step paths
 filenames = []

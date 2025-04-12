@@ -153,7 +153,7 @@ def extractFromSimulation(file):
     p_resampled = resample_field(X, Y, Z, p_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
     c_resampled = resample_field(X, Y, Z, c_mapped, n_x=re_x, n_y=re_y, n_z=re_z)
 
-    # rotate to match PIFu coordinate system (x,y,z) -> (z,x,y)
+    # rotate to match PIFu coordinate system (x,y,z) -> (y,z,x)
     u_resampled = u_resampled.transpose((1, 2, 0))
     v_resampled = v_resampled.transpose((1, 2, 0))
     w_resampled = w_resampled.transpose((1, 2, 0))
