@@ -696,8 +696,8 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
     ind = opt.resolution // 2
 
     if plane_dim == 'x':
-        var_plot = preds[ind, :, :].T
-        alpha_plot = alpha[ind, :, :].T
+        var_plot = preds[ind, :, :]
+        alpha_plot = alpha[ind, :, :]
     if plane_dim == 'y':
         var_plot = preds[:, ind, :].T
         alpha_plot = alpha[:, ind, :].T

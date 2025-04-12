@@ -27,14 +27,15 @@ from lib.geometry import index
 # get options
 opt = BaseOptions().parse()
 
-SLICE_DIM = 'z'
+SLICE_DIM1 = 'z'
+SLICE_DIM2 = 'x'
 
 def train(opt):
     # set cuda
     cuda = torch.device('cuda:%d' % opt.gpu_id)
 
-    train_dataset = EvalDataset2(opt, phase='train', slice_dim=SLICE_DIM)
-    test_dataset = EvalDataset2(opt, phase='test', slice_dim=SLICE_DIM)
+    train_dataset = EvalDataset2(opt, phase='test', slice_dim=SLICE_DIM1)
+    test_dataset = EvalDataset2(opt, phase='test', slice_dim=SLICE_DIM2)
 
     projection_mode = train_dataset.projection_mode
 
@@ -90,8 +91,8 @@ def train(opt):
 
             if not opt.no_num_eval:
                 test_losses = {}
-                print('calc error (validation) ...')
-                test_errors = calc_error(opt, netG, cuda, test_dataset, 1, slice_dim=SLICE_DIM, ds='test', plot_results=True)
+                print('Plot velocity and presure prediction (test dataset) in', SLICE_DIM1)
+                test_errors = calc_error(opt, netG, cuda, train_dataset, 100, slice_dim=SLICE_DIM1, ds='test', plot_results=True)
                 str_err_test = 'Val | MSE_a: {0:06f} | MSE_u: {1:06f} | MSE_v: {2:06f} | MSE_w: {3:06f} | MSE_p: {4:06f} | MSE_c: {' \
                                '5:06f} | MSE_ph: {6:06f} | MSE_nse_x: {7:06f} | MSE_nse_y: {8:06f} | MSE_nse_z: {9:06f} | IOU: {10:06f} | prec: {11:06f} | recall: {' \
                                '12:06f}\n'.format(*test_errors)
@@ -104,9 +105,9 @@ def train(opt):
                 test_losses['prec(val)'] = prec
                 test_losses['recall(val)'] = recall
 
-                print('calc error (train) ...')
+                print('Plot velocity and presure prediction (test dataset) in', SLICE_DIM2)
                 train_dataset.is_train = False
-                train_errors = calc_error(opt, netG, cuda, test_dataset, 1, slice_dim=SLICE_DIM, ds='test', plot_results=True)
+                train_errors = calc_error(opt, netG, cuda, test_dataset, 100, slice_dim=SLICE_DIM2, ds='test', plot_results=True)
                 train_dataset.is_train = True
                 str_err_train = 'Train | MSE_a: {0:06f} | MSE_u: {1:06f} | MSE_v: {2:06f} | MSE_w: {3:06f} | MSE_p: {4:06f} | MSE_c: {' \
                                '5:06f} | MSE_ph: {6:06f} | MSE_nse_x: {7:06f} | MSE_nse_y: {8:06f} | MSE_nse_z: {9:06f} | IOU: {10:06f} | prec: {11:06f} | recall: {' \

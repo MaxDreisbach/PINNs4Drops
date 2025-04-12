@@ -69,32 +69,34 @@ class EvalDataset2(Dataset):
     def modify_commandline_options(parser, is_train):
         return parser
 
-    def __init__(self, opt, phase='train', slice_dim='z'):
+    def __init__(self, opt, phase='test', slice_dim='z'):
         self.opt = opt
         self.projection_mode = 'orthogonal'
         self.slice_dim = slice_dim
+        self.is_train = (phase == 'test')
+        self.load_size = self.opt.loadSize
 
-        # Path setup
+                # Path setup
         self.root = self.opt.dataroot
         if self.opt.RGB:
-            #self.RENDER = os.path.join('./train_data_DFS2024A', 'RENDER')
             self.RENDER = os.path.join('../PIFu-master/train_data_DFS2023C', 'RENDER')
         else:
             self.RENDER = os.path.join(self.root, 'RENDER')
-        print('Render path: ', self.RENDER)
 
-        self.MASK = os.path.join(self.root, 'MASK')
-        #self.MASK = os.path.join('../PIFu-master/train_data_DFS2023C', 'MASK')
-        self.PARAM = os.path.join(self.root, 'PARAM')
-        #self.PARAM = os.path.join('../PIFu-master/train_data_DFS2023C', 'PARAM')
-        self.UV_MASK = os.path.join(self.root, 'UV_MASK')
-        self.UV_NORMAL = os.path.join(self.root, 'UV_NORMAL')
-        self.UV_RENDER = os.path.join(self.root, 'UV_RENDER')
-        self.UV_POS = os.path.join(self.root, 'UV_POS')
+        self.MASK = os.path.join('../PINN-PIFu/train_data_DFS2024D/MASK')
         self.OBJ = os.path.join('../PIFu-master/train_data_DFS2023C', 'GEO', 'OBJ')
-        self.VEL = os.path.join(self.root, 'VEL')
-        self.PRES = os.path.join(self.root, 'PRES')
-        self.TIME = os.path.join(self.root, 'TIME')
+        self.PARAM = os.path.join('../PIFu-master/train_data_DFS2023C/PARAM')
+        if self.is_train:
+            print('Path setup: \n', self.RENDER, ' \n', self.MASK, ' \n', self.OBJ, ' \n', self.PARAM)
+
+        self.UV_MASK = os.path.join('../PIFu-master/train_data_DFS2023C/UV_MASK')
+        self.UV_NORMAL = os.path.join('../PIFu-master/train_data_DFS2023C/UV_NORMAL')
+        self.UV_RENDER = os.path.join('../PIFu-master/train_data_DFS2023C/UV_RENDER')
+        self.UV_POS = os.path.join('../PIFu-master/train_data_DFS2023C/UV_POS')
+
+        self.VEL = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'VEL')
+        self.PRES = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'PRES')
+        self.TIME = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'TIME')
 
         self.B_MIN = np.array([-128, -28, -128])
         self.B_MAX = np.array([128, 228, 128])
@@ -172,11 +174,10 @@ class EvalDataset2(Dataset):
             return sorted(list(set(all_subjects) - set(test_subjects)))
 
         if self.is_train:
-            # print(sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects))))
             return sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
         else:
-            # print(sorted(list(set(val_subjects))))
-            return sorted(list(val_subjects))
+            #return sorted(list(val_subjects))
+            return sorted(list(test_subjects))
 
     def __len__(self):
         return len(self.subjects) * len(self.yaw_list) * len(self.pitch_list)

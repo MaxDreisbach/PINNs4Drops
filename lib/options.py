@@ -115,7 +115,7 @@ class BaseOptions():
         parser.add_argument('--random_scale', action='store_true', help='if random flip')
         parser.add_argument('--no_residual', action='store_true', help='no skip connection in mlp')
         # NEW: learning rate schedule shortened
-        parser.add_argument('--schedule', type=int, nargs='+', default=[4, 6, 9, 10],
+        parser.add_argument('--schedule', type=int, nargs='+', default=[16, 24, 36, 40],
                             help='Decrease learning rate at these epochs.')
         parser.add_argument('--schedule_DSH2024', type=int, nargs='+', default=[40, 60, 90, 100],
                             help='Decrease learning rate at these epochs.')

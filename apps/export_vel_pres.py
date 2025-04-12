@@ -207,7 +207,7 @@ def extractFromSimulation(file):
     # plot_iso_surface(x_resampled, y_resampled, z_resampled, p_resampled)
     # plot_velocity_field(x_resampled, y_resampled, z_resampled, u_resampled, v_resampled, w_resampled)
 
-    # rotate to match PIFu coordinate system (x,y,z) -> (x,z,y)
+    # rotate to match PIFu coordinate system (x,y,z) -> (y,z,x)
     u_resampled = u_resampled.transpose((1, 2, 0))
     v_resampled = v_resampled.transpose((1, 2, 0))
     w_resampled = w_resampled.transpose((1, 2, 0))

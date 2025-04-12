@@ -1,5 +1,3 @@
-#from data.config import raw_dataset, render_dataset, archive_dataset, model_list, zip_path
-
 import os
 from os import walk
 import glob
@@ -13,7 +11,7 @@ ratio_val = 0.15
 
 
 ### Input dirs
-out_path = "../train_data_DFS2024A/"
+out_path = "../train_data_DFS2025A/"
 in_path = "../train_data_DFS2024A/RENDER/"
 
 def pick_random(dnames,out_path):

@@ -47,10 +47,15 @@ def eval_grid(coords, eval_func, num_samples=10000, time_step=None):
     preds = batch_eval(coords, eval_func, num_samples=num_samples, time_step=time_step)
     sdf = preds[0].reshape(resolution)
     # only get prediction in liquid phase
-    u = np.multiply(preds[1].reshape(resolution), sdf)
-    v = np.multiply(preds[2].reshape(resolution), sdf)
-    w = np.multiply(preds[3].reshape(resolution), sdf)
-    p = np.multiply(preds[4].reshape(resolution), sdf)
+    # u = np.multiply(preds[1].reshape(resolution), sdf)
+    # v = np.multiply(preds[2].reshape(resolution), sdf)
+    # w = np.multiply(preds[3].reshape(resolution), sdf)
+    # p = np.multiply(preds[4].reshape(resolution), sdf)
+
+    u = preds[1].reshape(resolution)
+    v = preds[2].reshape(resolution)
+    w = preds[3].reshape(resolution)
+    p = preds[4].reshape(resolution)
 
     return sdf, u, v, w, p
 

@@ -28,14 +28,20 @@ class AdaptiveLinear(nn.Linear):
         functions
     """
 
-    def __init__(self, in_features, out_features, bias=True, adaptive_rate=None, adaptive_rate_scaler=None):
+    def __init__(self, in_features, out_features, bias=True, adaptive_rate=0.5, adaptive_rate_scaler=2.0, mode='neuronwise'):
         super(AdaptiveLinear, self).__init__(in_features, out_features, bias)
         self.adaptive_rate = adaptive_rate
         self.adaptive_rate_scaler = adaptive_rate_scaler
-        if self.adaptive_rate:
+
+        if mode == 'layerwise':
+            # L-LAAF
+            self.A = nn.Parameter(self.adaptive_rate * torch.ones(1))
+        elif mode == 'neuronwise':
+            # N-LAAF
             self.A = nn.Parameter(self.adaptive_rate * torch.ones(self.in_features))
-            if not self.adaptive_rate_scaler:
-                self.adaptive_rate_scaler = 10.0
+        else:
+            # default: no trainable activation
+            self.A = self.adaptive_rate
 
     def forward(self, input):
         if self.adaptive_rate:

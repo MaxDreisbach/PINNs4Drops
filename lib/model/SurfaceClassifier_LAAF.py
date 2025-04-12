@@ -39,7 +39,6 @@ class SurfaceClassifier_LAAF(nn.Module):
                         filter_channels[l + 1],
                         adaptive_rate=1/self.LAAF_scale,
                         adaptive_rate_scaler=self.LAAF_scale))
-                print("layer: ", l, "neurons: ", filter_channels[l])
                 self.add_module("conv%d" % l, self.filters[l])
 
     def forward(self, im_feat, x_feat, y_feat, z_feat, t_feat):
