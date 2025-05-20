@@ -542,11 +542,11 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         # check sign of gravity term
         res_momentum_y = rho_M / self.rho_ref * (v_t + u * v_x + v * v_y + w * v_z) + p_y - one_Re * (
-                v_xx + v_yy + v_zz) - 2 * one_Re_y * u_y - one_Re_x * (u_y + v_x) - one_Re_z * (
+                v_xx + v_yy + v_zz) - 2 * one_Re_y * v_y - one_Re_x * (u_y + v_x) - one_Re_z * (
                                  v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
 
         res_momentum_z = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z) + p_z - one_Re * (
-                w_xx + w_yy + w_zz) - 2 * one_Re_z * u_z - one_Re_y * (v_z + w_y) - one_Re_x * (
+                w_xx + w_yy + w_zz) - 2 * one_Re_z * w_z - one_Re_y * (v_z + w_y) - one_Re_x * (
                                  u_z + w_x) - f_sigma_z
 
         ''' Debug momentum in z'''
