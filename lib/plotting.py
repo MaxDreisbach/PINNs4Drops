@@ -694,29 +694,44 @@ def gen_vtk_prediction(coords, preds, name, sample_name):
 def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_name):
     # interpolate point cloud to 2D-plane
     ind = opt.resolution // 2
+    
+    # mask out prediction in solid domain
+    ground = 17 # for FDM
+    ground_index = int(ground * opt.resolution / 256)
+    preds[:, :int(ground_index * opt.resolution / 256), :] = 0
 
     if plane_dim == 'x':
         var_plot = preds[ind, :, :]
         alpha_plot = alpha[ind, :, :]
-    if plane_dim == 'y':
+    elif plane_dim == 'y':
         var_plot = preds[:, ind, :].T
         alpha_plot = alpha[:, ind, :].T
-    if plane_dim == 'z':
+    elif plane_dim == 'z':
         var_plot = preds[:, :, ind].T
         alpha_plot = alpha[:, :, ind].T
+    else:
+        raise ValueError("plane_dim must be 'x', 'y', or 'z'")
 
     if type == 'alpha':
+        vmin, vmax = 0.0, 1.0
         levels = np.linspace(0, 1.0, 100)
         cbar_ticks = [0.1, 0.3, 0.5, 0.7, 0.9]
         colormap = 'RdBu_r'
-    if type == 'vel':
+    elif type == 'vel':
+        vmin, vmax = -0.7, 0.7
         levels = np.linspace(-0.7, 0.7, 100)
         cbar_ticks = [-0.5, -0.25, 0, 0.25, 0.5]
         colormap = 'RdBu_r'
-    if type == 'pres':
+    elif type == 'pres':
+        vmin, vmax = -150, 600
         levels = np.linspace(-150, 600, 100)
         cbar_ticks = [-150.0, 0.0, 150, 300, 450, 600]
         colormap = 'viridis'
+    else:
+        raise ValueError("Invalid type. Choose from 'alpha', 'vel', or 'pres'.")
+
+    # Clip the data to colormap range
+    var_plot = np.clip(var_plot, vmin, vmax)
 
     plt.rcParams.update({
         "text.usetex": True,
@@ -726,9 +741,23 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
 
     x, y = np.meshgrid(np.arange(opt.resolution) / opt.resolution, np.arange(opt.resolution) / opt.resolution)
 
-    fig, axs = plt.subplots(figsize=(4.75, 6.5))
-    p1 = axs.contourf(x, y, var_plot, levels=levels, cmap=colormap)
-    #p1 = axs.contourf(x, y, var_plot, cmap=colormap)
+    fig, axs = plt.subplots(figsize=(4.75, 6.85))
+    #p1 = axs.contourf(
+    #    x, y, var_plot,
+    #    levels=levels,
+    #    cmap=colormap,
+    #    antialiased=False,
+    #    linewidths=0)
+    
+    p1 = axs.imshow(
+        var_plot,
+        origin='lower',
+        extent=[0, 1, 0, 1],
+        vmin=vmin,
+        vmax=vmax,
+        cmap=colormap,
+        interpolation='bilinear'
+    )
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs.contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
@@ -741,9 +770,9 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
     axs.set_xticks(x)
     axs.set_yticks(y)
     axs.tick_params(axis='both', which='major', labelsize=20)
-    axs.set_title('$%s_{\mathrm{R}}$' % name, fontsize=20, y=1, pad=20)
-
-    plt.tight_layout(w_pad=4.5)
+    axs.set_title('$%s_{\mathrm{R}}$' % name, fontsize=20, pad=20)
+    
+    #plt.tight_layout(w_pad=0.5)
     axs.set_aspect('equal', adjustable="datalim")
     cbar1 = fig.colorbar(p1, ax=axs, location='bottom')
     cbar1.ax.tick_params(labelsize=20, which='major', width=1.5, length=6)
@@ -751,7 +780,8 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
     #cbar1.ax.locator_params(nbins=5)
 
     filename = sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
-    plt.savefig(filename)
+    #plt.savefig(filename, dpi=300)
+    plt.savefig(filename, bbox_inches='tight', pad_inches=0.01)
     # plt.show()
     plt.close(fig)
 
