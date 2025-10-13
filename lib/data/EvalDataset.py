@@ -13,7 +13,7 @@ import trimesh
 import logging
 import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
-#from natsort import natsorted
+from natsort import natsorted
 
 from ..sdf import create_grid
 
@@ -167,18 +167,16 @@ class EvalDataset(Dataset):
     def get_subjects(self):
         all_subjects = os.listdir(self.RENDER)
         val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
+        eval_subjects = np.loadtxt(os.path.join(self.root, 'eval.txt'), dtype=str)
         test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
+
         if len(val_subjects) == 0:
-            return sorted(list(set(all_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(test_subjects)))
 
         if self.is_train:
-            # print(sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects))))
-            return sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
         else:
-            #return sorted(list(val_subjects))
-            combined_subjects = set(val_subjects) | set(test_subjects)
-            print(sorted(list(combined_subjects)))
-            return sorted(list(combined_subjects))
+            return natsorted(list(eval_subjects))
 
 
     def __len__(self):
@@ -338,18 +336,13 @@ class EvalDataset(Dataset):
         else:
             # print('Online loading of mesh %s during query point sampling' % subject)
             mesh = trimesh.load(os.path.join(self.OBJ, subject, '%s.obj' % subject))
+            
 
-
-        surface_points, _ = trimesh.sample.sample_surface(mesh, 4 * self.num_sample_inout)
-        sample_points = surface_points + np.random.normal(scale=self.opt.sigma, size=surface_points.shape)
-
-        # add random points within image space
+        # sample random points within image space
         length = self.B_MAX - self.B_MIN
-        random_points = np.random.rand(self.num_sample_inout // 4, 3) * length + self.B_MIN
-        sample_points = np.concatenate([sample_points, random_points], 0)
+        sample_points = np.random.rand(self.n_data, 3) * length + self.B_MIN
         #print(sample_points)
         #print('sample_points shape: ', sample_points.shape)
-
 
         np.random.shuffle(sample_points)
 
@@ -357,14 +350,9 @@ class EvalDataset(Dataset):
         inside_points = sample_points[inside]
         outside_points = sample_points[np.logical_not(inside)]
 
-        nin = inside_points.shape[0]
-        inside_points = inside_points[:self.num_sample_inout // 2] if nin > self.num_sample_inout // 2 else inside_points
-        outside_points = outside_points[:self.num_sample_inout // 2] if nin > self.num_sample_inout // 2 else outside_points[:(self.num_sample_inout - nin)]
-
         samples = np.concatenate([inside_points, outside_points], 0).T
         labels = np.concatenate([np.ones((1, inside_points.shape[0])), np.zeros((1, outside_points.shape[0]))], 1)
         # save_samples_truncted_prob('out.ply', samples.T, labels.T)
-
         ''' Added time step read in'''
         timestep_path = os.path.join(self.TIME, subject, 'time_step.txt')
         with open(timestep_path) as f:

@@ -4,23 +4,15 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 ROOT_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-import time
-import json
-import numpy as np
-import cv2
 import random
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from lib.options import BaseOptions
-from lib.mesh_util import *
-from lib.sample_util import *
 from lib.train_util import *
 from lib.loss_util import *
 from lib.data import *
 from lib.model import *
-from lib.geometry import index
 
 # get options
 opt = BaseOptions().parse()
@@ -33,10 +25,6 @@ def train(opt):
     train_dataset = TrainDataset(opt, phase='train')
     test_dataset = TrainDataset(opt, phase='test')
     projection_mode = train_dataset.projection_mode
-
-    # get random sample of training data
-    #tr_iter = 10
-    #train_dataset_split = torch.utils.data.random_split(train_dataset, [tr_iter, len(train_dataset) - tr_iter])[0]
 
     # create data loader
     train_data_loader = DataLoader(train_dataset,
@@ -56,17 +44,7 @@ def train(opt):
 
     # create net
     netG = HGPIFuNet(opt, projection_mode).to(device=cuda)
-
-    #for key, value in netG.state_dict().items():
-    #    print(f"{key}: {value.shape}\n{value}")
-
     optimizerG = torch.optim.RMSprop(netG.parameters(), lr=opt.learning_rate, momentum=0, weight_decay=0)
-    # optimizerG = torch.optim.Adam(netG.parameters(), lr=opt.learning_rate, amsgrad=True)
-
-    # optimizer variants for partly frozen network (hourglas feature extraction frozen)
-    # optimizerG = torch.optim.RMSprop(filter(lambda p: p.requires_grad, netG.parameters()), lr=opt.learning_rate, momentum=0, weight_decay=0)
-    # optimizerG = torch.optim.Adam(filter(lambda p: p.requires_grad, netG.parameters()), lr=opt.learning_rate, amsgrad=True)
-
     lr = opt.learning_rate
     print('Using Network: ', netG.name)
 
@@ -109,6 +87,7 @@ def train(opt):
 
     # training
     start_epoch = 0 if not opt.continue_train else max(opt.resume_epoch, 0)
+    losses_EWMA_prev = None
     for epoch in range(start_epoch, opt.num_epoch):
         epoch_start_time = time.time()
 
@@ -148,29 +127,28 @@ def train(opt):
 
             # learning rate onramp for u,v,w,p data loss terms
             # this is done because the other losses overweight the alpha loss in early training otherwise
-            losses = get_data_loss_onramp(losses, train_idx, epoch, duration=10000)
+            losses = get_data_loss_onramp(losses, train_idx, epoch, duration=opt.onramp)
+            #losses = get_pde_loss_onramp(losses, train_idx, epoch, duration=opt.onramp)
             losses = get_pde_loss_cuton(losses, a_thresh=0.03)
             #print('losses before weighting: ', losses)
 
-            LOSS_SoftAdapt = True
-            if LOSS_SoftAdapt:
+            if opt.loss_softadapt:
                 ''' Calculate loss weights with SoftAdapt on EWMA of losses 
                 refresh every 100 iterations'''
                 if train_idx == 0 and (epoch == 0 or epoch == opt.resume_epoch):
                     losses_EWMA = losses
                     loss_weights = torch.ones_like(losses) * 1.0
-                if train_idx % 1000 == 0 and train_idx <= 4000 and (epoch == 0 or epoch == opt.resume_epoch):
-                    # print(" Assigning initial loss weights")
+                if train_idx % 10 == 0:
                     losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
-                    loss_weights = torch.ones_like(losses) * 1.0
-                    losses_EWMA_prev = losses_EWMA
-                if train_idx % 1000 == 0 and train_idx >= 5000:
-                    losses_EWMA = get_EWMA(losses, losses_EWMA, train_idx, epoch, opt)
-                    loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
-                    losses_EWMA_prev = losses_EWMA
-                    # print("Calculating new loss weights")
+                    #print([f"{x:.3e}" for x in losses_EWMA.cpu().numpy()])
+                if train_idx % 1000 == 0: #100 or 1000
+                    if losses_EWMA_prev is None:
+                        losses_EWMA_prev = losses_EWMA
+                    else:
+                        loss_weights = get_loss_weights_SoftAdapt(losses_EWMA, losses_EWMA_prev)
+                        losses_EWMA_prev = losses_EWMA
                 losses = loss_weights * losses
-            else:
+            elif opt.loss_inverse_weight:
                 ''' Calculate loss weights with inverse relative magnitude
                 refresh every iteration'''
                 losses_EWMA = torch.zeros_like(losses)

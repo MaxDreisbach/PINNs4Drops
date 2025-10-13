@@ -233,6 +233,13 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         if labels_u is not None and labels_v is not None and labels_w is not None:
             labels_u_proj, labels_w_proj = project_velocity_vector_field(labels_u, labels_w, calibs)
+            p_plot = points[:1, :, self.n_data:self.n_data * 2]
+            print('Plotting u')
+            plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_u, -2.0, 2.0)
+            print('Plotting v')
+            plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_v, -2.0, 2.0)
+            print('Plotting w')
+            plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_w, -2.0, 2.0)
 
             # normalizing the label data
             labels_u_proj = normalize(labels_u_proj, self.umin, self.umax)

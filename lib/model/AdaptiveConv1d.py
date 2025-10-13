@@ -60,6 +60,9 @@ class AdaptiveConv1d(nn.Conv1d):
     def forward(self, input):
         if self.adaptive_rate:
             #print('self.A: ', self.A)
+            #print('input: ', input.get_device())
+            #print('self.A: ', self.A.get_device())
+            #print('self.adaptive_rate_scaler: ', self.adaptive_rate_scaler.get_device())
             input = self.adaptive_rate_scaler * self.A * input
         return F.conv1d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 

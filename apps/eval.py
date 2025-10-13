@@ -15,7 +15,6 @@ from lib.mesh_util import *
 from lib.sample_util import *
 from lib.train_util import *
 from lib.model import *
-from lib.model.HGPIFuNet_CH import HGPIFuNet_CH
 
 from PIL import Image
 import torchvision.transforms as transforms
@@ -72,10 +71,7 @@ class Evaluator:
         B_MAX = np.array([1, 1, 1])
         projection_matrix = np.identity(4)
         projection_matrix[1, 1] = -1
-        ''' PINN: make scale and translation consistent with trainining data '''
-        #projection_matrix = projection_matrix * 0.0072680664 # scale_render / scale_orto / scale_domain: 0.74425/0.4/256=0.0072680664
-        #projection_matrix[3, 3] = 1
-        #projection_matrix[1, 3] = 0.85550058 # 0.74425/0.4/256*117.7 -> translation
+        
         calib = torch.Tensor(projection_matrix).float()
         # Mask
         mask = Image.open(mask_path).convert('L')

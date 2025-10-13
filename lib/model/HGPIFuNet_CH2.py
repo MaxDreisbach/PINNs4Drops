@@ -77,20 +77,12 @@ class HGPIFuNet_CH2(BasePIFuNet):
                 for parameter in layer.parameters():
                     parameter.requires_grad = False
 
-        if not opt.use_cond_MLP:
-            print('Using modified MLP architecture from PIFuNet')
-            self.surface_classifier = SurfaceClassifier_CH2(
-                filter_channels=self.opt.mlp_dim_CH2,
-                num_views=self.opt.num_views,
-                no_residual=self.opt.no_residual,
-                last_op=nn.Sigmoid())
-        else:
-            print('Using layer-wise adaptive activation functions PIFuNet')
-            self.surface_classifier = SurfaceClassifier_LAAF_CH2(
-                filter_channels=self.opt.mlp_dim_CH2,
-                num_views=self.opt.num_views,
-                no_residual=self.opt.no_residual,
-                last_op=nn.Sigmoid())
+        
+        self.surface_classifier = SurfaceClassifier_LAAF_CH2(
+            filter_channels=self.opt.mlp_dim_CH2,
+            num_views=self.opt.num_views,
+            no_residual=self.opt.no_residual,
+            last_op=nn.Sigmoid())
 
         self.normalizer = DepthNormalizer(opt)
 
@@ -125,7 +117,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
         # self.epsilon = flow_case["epsilon"] # capillary width
         # self.M_0 = flow_case["M_0"] # mobility
         # self.epsilon = 0.01  # following Qiu (2022) - https://doi.org/10.1063/5.0091063
-        self.epsilon = nn.Parameter(0.05 * torch.ones(1))  # initialize learnable interface thickness
+        self.epsilon = nn.Parameter(self.opt.eps * torch.ones(1))  # initialize learnable interface thickness
         self.M_0 = (self.epsilon.item()) ** 2
         self.L_THRESH = 0.05
         print('epsilon: ', self.epsilon.item())
@@ -152,13 +144,16 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
 
     def nth_derivative(self,f, wrt, n):
+        #f = f[:, :, self.n_data*2:]
+        #wrt = wrt[:, :, self.n_data*2:]
         for i in range(n):
             grads = grad(f, wrt, grad_outputs=torch.ones_like(f), create_graph=True, allow_unused=True)[0]
             f = grads
             if grads is None:
-                print('bad grad')
-                return torch.tensor(0.)
-        return grads[:, :, self.n_data:]
+                print(f"[Error] Gradient is None at order {i + 1}.")
+                return torch.tensor(0., device=f.device)
+        #return only the grads for the pde sampling points             
+        return grads[:, :, self.n_data*2:]
 
 
     def diff_xyz_de_norm(self, data):
@@ -214,7 +209,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
             self.im_feat_list = [self.im_feat_list[-1]]
 
 
-    def query(self, points, calibs, transforms=None, labels=None, labels_u=None, labels_v=None, labels_w=None,
+    def query(self, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None, labels_v=None, labels_w=None,
               labels_p=None, time_step=None):
         '''
         Given 3D points, query the network predictions for each point.
@@ -231,6 +226,9 @@ class HGPIFuNet_CH2(BasePIFuNet):
         :param labels_p: Optional [B, Res, N] gt pressure field labeling
         :return: [B, Res, N] predictions for each point
         '''
+        # collect sampling points for joint prediction -> later separated (after prediction) for loss computation
+        if uvwp_points is not None:
+            points = torch.cat([points, uvwp_points, residual_points], 2)
 
         if labels is not None:
             self.labels = labels
@@ -266,16 +264,10 @@ class HGPIFuNet_CH2(BasePIFuNet):
         xy = xyz[:, :2, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
 
-        '''non-dimensionalize coordinates
-        Flip y-axis - required as it was flipped in TrainDataset'''
-        x_non_dim = xyz[:, :1, :] / self.L_ref
-        y_non_dim = -xyz[:, 1:2, :] / self.L_ref
-        z_non_dim = xyz[:, 2:3, :] / self.L_ref
-
-        '''Normalize data to [0,1] by min-max-normalization'''
-        self.x_feat = normalize(x_non_dim, self.xmin, self.xmax)
-        self.y_feat = normalize(y_non_dim, self.xmin, self.xmax)
-        self.z_feat = normalize(z_non_dim, self.xmin, self.xmax)
+        '''Flip y-axis - required as it was flipped in TrainDataset'''
+        self.x_feat = xyz[:, :1, :]
+        self.y_feat = -xyz[:, 1:2, :]
+        self.z_feat = xyz[:, 2:3, :]
         self.x_feat.requires_grad = True
         self.y_feat.requires_grad = True
         self.z_feat.requires_grad = True
@@ -311,18 +303,14 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
 
     def get_solid_domain_mask(self, points):
-        ground_mask = torch.zeros_like(points[:, :1, :])
-        for i in range(self.opt.num_sample_inout):
-            if points[:, 1, i] >= self.y_ground:
-                ground_mask[:, :, i] = 1
-            else:
-                ground_mask[:, :, i] = 0
-        return ground_mask
+        y_coords = points[:, 1:2, :]  # Get y-coordinates
+        mask = (y_coords >= self.y_ground).float()
+        return mask
 
 
     def get_RBA_residual(self, residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
-        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / res_max.item()
+        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / (res_max.item() + 1e-8)
         # print('Residuals maximum: ', res_max.item())
         # print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
         # print('Lagrange multipliers: ', lambda_k)
@@ -351,20 +339,23 @@ class HGPIFuNet_CH2(BasePIFuNet):
         '''
         Calculates MSE-loss of velocity data sampling points
         '''
-        if self.n_data >= self.pred.size(dim=2):
-            self.n_data = self.pred.size(dim=2)
+        if points is not None:
+            n_start = self.n_data
+            n_end = self.n_data * 2
+            # get prediction for observation points
+            pred_u = self.pred[:, 1, n_start:n_end]
+            pred_v = self.pred[:, 2, n_start:n_end]
+            pred_w = self.pred[:, 3, n_start:n_end]
 
-        # get prediction for observation points
-        pred_u = self.pred[:, 1, :self.n_data]
-        pred_v = self.pred[:, 2, :self.n_data]
-        pred_w = self.pred[:, 3, :self.n_data]
-
-        # Do not calculate loss for sample points below surface in solid domain and within grooves
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_data]
-        error_u = self.error_term(pred_u * mask, self.labels_u * mask)
-        error_v = self.error_term(pred_v * mask, self.labels_v * mask)
-        error_w = self.error_term(pred_w * mask, self.labels_w * mask)
+            # Do not calculate loss for sample points below surface in solid domain and within grooves
+            mask = self.get_solid_domain_mask(points)
+            error_u = self.error_term(pred_u * mask, self.labels_u * mask)
+            error_v = self.error_term(pred_v * mask, self.labels_v * mask)
+            error_w = self.error_term(pred_w * mask, self.labels_w * mask)
+        else:
+            error_u = 0
+            error_v = 0
+            error_w = 0
 
         return error_u, error_v, error_w
 
@@ -373,64 +364,35 @@ class HGPIFuNet_CH2(BasePIFuNet):
         '''
         Calculates MSE-loss of pressure data sampling points
         '''
-        if self.n_data >= self.pred.size(dim=2):
-            self.n_data = self.pred.size(dim=2)
+        if points is not None:
+            n_start = self.n_data
+            n_end = self.n_data * 2
 
-        # get prediction for observation points
-        pred_p = self.pred[:, 4, :self.n_data]
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, :self.n_data]
-        error_p = self.error_term(pred_p * mask, self.labels_p * mask)
+            # get prediction for observation points
+            pred_p = self.pred[:, 4, n_start:n_end]
+            mask = self.get_solid_domain_mask(points)
+            error_p = self.error_term(pred_p * mask, self.labels_p * mask)
+        else:
+            error_p = 0
 
         return error_p
-
-
-    def detect_faulty_derivative(self, grad, name):
-        error_log = 'error_log.txt'
-        faulty_grad = 0
-        alpha = self.pred[0, 0, :]
-
-        if torch.any(grad.isnan()):
-            print('at least one value of %s is nan' % name)
-            print(grad[grad.isnan()])
-            print('Occupancy field is: ', alpha[grad.isnan()])
-            faulty_grad = 1
-            # write error log
-            with open(error_log, 'w') as outfile:
-                outfile.write('at least one value of %s is nan \n' % name)
-                outfile.write(str(grad[grad.isnan()]))
-                outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
-
-        if torch.any(grad.isinf()):
-            print('at least one value of %s is inf' % name)
-            print(grad[grad.isinf()])
-            print('Occupancy field is: ', alpha[grad.isinf()])
-            faulty_grad = 2
-            with open(error_log, 'w') as outfile:
-                outfile.write('at least one value of %s is inf \n' % name)
-                outfile.write(str(grad[grad.isinf()]))
-                outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
-
-        # if not grad.all():
-        #    print('at least one value of %s is zero' % name)
-        #    print(grad[grad == 0])
-        #    print('Occupancy field is: ', alpha[grad == 0])
-        #    faulty_grad = 3
-
-        return faulty_grad
 
 
     def get_pde_loss(self, points, l_eps=False):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
         '''
+        #print('pred shape: ', self.pred.shape)
+        
+        n_start = self.n_data * 2
+        
         # get prediction
-        C = self.preds[0, 0, self.n_data:]  # preds instead of pred to get masking of C
-        u = self.pred[0, 1, self.n_data:]
-        v = self.pred[0, 2, self.n_data:]
-        w = self.pred[0, 3, self.n_data:]
-        p = self.pred[0, 4, self.n_data:]
-        phi = self.pred[0, 5, self.n_data:]
+        C = self.preds[:1, :1, n_start:]  # preds instead of pred to get masking of C
+        u = self.pred[:1, 1:2, n_start:]
+        v = self.pred[:1, 2:3, n_start:]
+        w = self.pred[:1, 3:4, n_start:]
+        p = self.pred[:1, 4:5, n_start:]
+        phi = self.pred[:1, 5:6, n_start:]
 
         # get dimensional quantities
         # using de_norm() to transform alpha field prediction [0,1] to C prediction [-1,1]
@@ -444,41 +406,46 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
         # derivatives
         C_t = self.diff_t_de_norm(self.nth_derivative(C, wrt=self.t, n=1))
-        C_x = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.x, n=1))
-        C_y = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.y, n=1))
-        C_z = self.diff_xyz_de_norm(self.nth_derivative(C, wrt=self.z, n=1))
-        C_xx = self.diff_xyz_de_norm(self.nth_derivative(C_x, wrt=self.x, n=1))
-        C_yy = self.diff_xyz_de_norm(self.nth_derivative(C_y, wrt=self.y, n=1))
-        C_zz = self.diff_xyz_de_norm(self.nth_derivative(C_z, wrt=self.z, n=1))
+        C_x = self.nth_derivative(C, wrt=self.x, n=1)
+        C_y = self.nth_derivative(C, wrt=self.y, n=1)
+        C_z = self.nth_derivative(C, wrt=self.z, n=1)
+        C_xx = self.nth_derivative(C_x, wrt=self.x, n=1)
+        C_yy = self.nth_derivative(C_y, wrt=self.y, n=1)
+        C_zz = self.nth_derivative(C_z, wrt=self.z, n=1)
         laplacian_C = C_xx + C_yy + C_zz
 
+        phi_xx = self.nth_derivative(phi, wrt=self.x, n=2)
+        phi_yy = self.nth_derivative(phi, wrt=self.y, n=2)
+        phi_zz = self.nth_derivative(phi, wrt=self.z, n=2)
+        laplacian_phi = phi_xx + phi_yy + phi_zz
+
         u_t = self.diff_t_de_norm(self.nth_derivative(u, wrt=self.t, n=1))
-        u_x = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.x, n=1))
-        u_y = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.y, n=1))
-        u_z = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.z, n=1))
-        u_xx = self.diff_xyz_de_norm(self.nth_derivative(u_x, wrt=self.x, n=1))
-        u_yy = self.diff_xyz_de_norm(self.nth_derivative(u_y, wrt=self.y, n=1))
-        u_zz = self.diff_xyz_de_norm(self.nth_derivative(u_z, wrt=self.z, n=1))
+        u_x = self.nth_derivative(u, wrt=self.x, n=1)
+        u_y = self.nth_derivative(u, wrt=self.y, n=1)
+        u_z = self.nth_derivative(u, wrt=self.z, n=1)
+        u_xx = self.nth_derivative(u_x, wrt=self.x, n=1)
+        u_yy = self.nth_derivative(u_y, wrt=self.y, n=1)
+        u_zz = self.nth_derivative(u_z, wrt=self.z, n=1)
 
         v_t = self.diff_t_de_norm(self.nth_derivative(v, wrt=self.t, n=1))
-        v_x = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.x, n=1))
-        v_y = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.y, n=1))
-        v_z = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.z, n=1))
-        v_xx = self.diff_xyz_de_norm(self.nth_derivative(v_x, wrt=self.x, n=1))
-        v_yy = self.diff_xyz_de_norm(self.nth_derivative(v_y, wrt=self.y, n=1))
-        v_zz = self.diff_xyz_de_norm(self.nth_derivative(v_z, wrt=self.z, n=1))
+        v_x = self.nth_derivative(v, wrt=self.x, n=1)
+        v_y = self.nth_derivative(v, wrt=self.y, n=1)
+        v_z = self.nth_derivative(v, wrt=self.z, n=1)
+        v_xx = self.nth_derivative(v_x, wrt=self.x, n=1)
+        v_yy = self.nth_derivative(v_y, wrt=self.y, n=1)
+        v_zz = self.nth_derivative(v_z, wrt=self.z, n=1)
 
         w_t = self.diff_t_de_norm(self.nth_derivative(w, wrt=self.t, n=1))
-        w_x = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.x, n=1))
-        w_y = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.y, n=1))
-        w_z = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.z, n=1))
-        w_xx = self.diff_xyz_de_norm(self.nth_derivative(w_x, wrt=self.x, n=1))
-        w_yy = self.diff_xyz_de_norm(self.nth_derivative(w_y, wrt=self.y, n=1))
-        w_zz = self.diff_xyz_de_norm(self.nth_derivative(w_z, wrt=self.z, n=1))
+        w_x = self.nth_derivative(w, wrt=self.x, n=1)
+        w_y = self.nth_derivative(w, wrt=self.y, n=1)
+        w_z = self.nth_derivative(w, wrt=self.z, n=1)
+        w_xx = self.nth_derivative(w_x, wrt=self.x, n=1)
+        w_yy = self.nth_derivative(w_y, wrt=self.y, n=1)
+        w_zz = self.nth_derivative(w_z, wrt=self.z, n=1)
 
-        p_x = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.x, n=1))
-        p_y = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.y, n=1))
-        p_z = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.z, n=1))
+        p_x = self.nth_derivative(p, wrt=self.x, n=1)
+        p_y = self.nth_derivative(p, wrt=self.y, n=1)
+        p_z = self.nth_derivative(p, wrt=self.z, n=1)
 
         # mixture density, viscosity
         rho_M = (1 + C) / 2 * self.rho_1 + (1 - C) / 2 * self.rho_2
@@ -498,13 +465,12 @@ class HGPIFuNet_CH2(BasePIFuNet):
         one_Fr2 = self.g * self.L_ref / self.U_ref ** 2  # 1/(Fr^2)
 
         ''' Cahn-Hilliard equation '''
-        # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021)
+        # ensure sensible range for learnable interface thickness epsilon (see Qiu (2022), Fink (2018), Samkhaniani (2021))
+        self.epsilon.data.clamp_(min=2.2e-05, max=self.opt.eps)
         if l_eps:
-            self.epsilon.data.clamp_(min=2.2e-05, max=0.05)
             eps_loss = F.huber_loss(self.epsilon, 2.2e-05 * torch.ones_like(self.epsilon))
         else:
-            self.epsilon.data.clamp_(min=0.05, max=0.05)
-            eps_loss = F.huber_loss(self.epsilon, 0.05 * torch.ones_like(self.epsilon))
+            eps_loss = F.huber_loss(self.epsilon, self.opt.eps * torch.ones_like(self.epsilon))
         self.M_0 = self.epsilon ** 2
         #print('M_0: ', self.M_0)
 
@@ -534,18 +500,18 @@ class HGPIFuNet_CH2(BasePIFuNet):
         due to continuity) '''
 
         # calculate residual of momentum equations
+        # calculate residual of momentum equations
         res_momentum_x = rho_M / self.rho_ref * (u_t + u * u_x + v * u_y + w * u_z) + p_x - one_Re * (
                 u_xx + u_yy + u_zz) - 2 * one_Re_x * u_x - one_Re_y * (u_y + v_x) - one_Re_z * (
-                                 u_z + w_x) - f_sigma_x
+                                      u_z + w_x) - f_sigma_x
 
-        # check sign of gravity term
         res_momentum_y = rho_M / self.rho_ref * (v_t + u * v_x + v * v_y + w * v_z) + p_y - one_Re * (
                 v_xx + v_yy + v_zz) - 2 * one_Re_y * v_y - one_Re_x * (u_y + v_x) - one_Re_z * (
-                                 v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
+                                  v_z + w_y) - f_sigma_y + rho_M / self.rho_ref * one_Fr2
 
         res_momentum_z = rho_M / self.rho_ref * (w_t + u * w_x + v * w_y + w * w_z) + p_z - one_Re * (
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * w_z - one_Re_y * (v_z + w_y) - one_Re_x * (
-                                 u_z + w_x) - f_sigma_z
+                                      u_z + w_x) - f_sigma_z
 
 
         ''' Phase field advection and continuity equation residual'''
@@ -555,8 +521,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
         res_phase_adv = C_t + u * C_x + v * C_y + w * C_z - self.M_0 * laplacian_phi
 
         ''' No residual calculation for sampling points within solid substrate -> Masking'''
-        ground_mask = self.get_solid_domain_mask(points)
-        mask = ground_mask[:, :, self.n_data:]
+        mask = self.get_solid_domain_mask(points)
         # zero_residual_points = (ground_mask == 0).sum()
         # print('no. of residual points on liquid-solid interface: %s -> nse residual set to zero' % zero_residual_points.item())
         res_momentum_x = res_momentum_x * mask
@@ -592,13 +557,13 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
         return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z, eps_loss, phi_loss
 
-    def forward(self, images, points, calibs, transforms=None, labels=None, labels_u=None,
+    def forward(self, images, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None,
                 labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
         # Get image feature
         self.filter(images)
 
         # Phase 2: point query
-        self.query(points=points, calibs=calibs, transforms=transforms, labels=labels, labels_u=labels_u,
+        self.query(points=points, calibs=calibs, transforms=transforms, labels=labels, uvwp_points=uvwp_points, residual_points=residual_points, labels_u=labels_u,
                    labels_v=labels_v, labels_w=labels_w, labels_p=labels_p, time_step=time_step)
 
         # get the prediction
@@ -607,8 +572,8 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
         # get the data loss for alpha, (u,w,w) velocity components and pressure
         loss_data_alpha = self.get_error()
-        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=points)
-        loss_data_p = self.get_pressure_loss(points=points)
+        loss_data_u, loss_data_v, loss_data_w = self.get_velocity_loss(points=uvwp_points)
+        loss_data_p = self.get_pressure_loss(points=uvwp_points)
 
         # only learn interface thickness when alpha field is sufficiently converged
         if loss_data_alpha < self.L_THRESH:
@@ -619,7 +584,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
         # get pde errors - do not call during inference (missing gradients for model in test mode)
         if get_PINN_loss:
             loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, phi_loss = self.get_pde_loss(
-                points=points, l_eps=learn_eps)
+                points=residual_points, l_eps=learn_eps)
         else:
             loss_conti = loss_data_alpha * 0
             loss_phase_conv = loss_data_alpha * 0

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .AdaptiveLinear import AdaptiveLinear
+from .AdaptiveConv1d import AdaptiveConv1d
 
 
 class SurfaceClassifier_LAAF(nn.Module):
@@ -17,28 +17,37 @@ class SurfaceClassifier_LAAF(nn.Module):
 
         if self.no_residual:
             for l in range(0, len(filter_channels) - 1):
-                self.filters.append(AdaptiveLinear(
+                self.filters.append(AdaptiveConv1d(
                     filter_channels[l],
                     filter_channels[l + 1],
-                    adaptive_rate=1/self.LAAF_scale,
-                    adaptive_rate_scaler=self.LAAF_scale))
-
+                    1,
+                    adaptive_rate=1 / self.LAAF_scale,
+                    adaptive_rate_scaler=self.LAAF_scale,
+                    mode='layerwise'
+                ))
                 self.add_module("conv%d" % l, self.filters[l])
         else:
             print('using skip connections in MLP')
             for l in range(0, len(filter_channels) - 1):
                 if 0 != l:
-                    self.filters.append(AdaptiveLinear(
+                    self.filters.append(AdaptiveConv1d(
                         filter_channels[l] + filter_channels[0],
                         filter_channels[l + 1],
-                        adaptive_rate=1/self.LAAF_scale,
-                        adaptive_rate_scaler=self.LAAF_scale))
+                        1,
+                        adaptive_rate=1 / self.LAAF_scale,
+                        adaptive_rate_scaler=self.LAAF_scale,
+                        mode='layerwise'
+                    ))
                 else:
-                    self.filters.append(AdaptiveLinear(
+                    self.filters.append(AdaptiveConv1d(
                         filter_channels[l],
                         filter_channels[l + 1],
-                        adaptive_rate=1/self.LAAF_scale,
-                        adaptive_rate_scaler=self.LAAF_scale))
+                        1,
+                        adaptive_rate=1 / self.LAAF_scale,
+                        adaptive_rate_scaler=self.LAAF_scale,
+                        mode='layerwise'
+                    ))
+
                 self.add_module("conv%d" % l, self.filters[l])
 
     def forward(self, im_feat, x_feat, y_feat, z_feat, t_feat):
@@ -47,16 +56,8 @@ class SurfaceClassifier_LAAF(nn.Module):
         inputs: image feature vector, x, y, z, t
         outputs: alpha, u, v, w, p
         '''
-        # print('image network input size: ', im_feat.size())
-        # print('x network input size: ', x_feat.size())
-        # print('t network input size: ', t_feat.size())
         y = torch.cat([im_feat, x_feat, y_feat, z_feat, t_feat], 1)
         tmpy = torch.cat([im_feat, x_feat, y_feat, z_feat, t_feat], 1)
-        y = y.squeeze(0)
-        y = y.swapaxes(0, 1)
-        tmpy = tmpy.squeeze(0)
-        tmpy = tmpy.swapaxes(0, 1)
-        #print('MLP input shape: ', y.size())
         for i, f in enumerate(self.filters):
             if self.no_residual:
                 y = self._modules['conv' + str(i)](y)
@@ -66,32 +67,23 @@ class SurfaceClassifier_LAAF(nn.Module):
                     else torch.cat([y, tmpy], 1)
                 )
             if i != len(self.filters) - 1:
-                ''' Changed to tanh activation function for PINN'''
-                # TODO: sine or GELU activation
                 y = torch.tanh(y)
-                # y = nn.GELU(y)
-                # y = torch.sin(y)
-                # y = F.leaky_relu(y)
 
             if self.num_views > 1 and i == len(self.filters) // 2:
                 y = y.view(
                     -1, self.num_views, y.shape[1], y.shape[2]
                 ).mean(dim=1)
-                tmpy = feature.view(
-                    -1, self.num_views, feature.shape[1], feature.shape[2]
+                #TODO: tmpy should not average the coordinates x,y,z,t; but instead take the coordinates of the centre step (however this should not be relevant as the calibs are expected to be the same, thus x,y,z,t are the same of all input image-coordinate pairs)
+                tmpy = tmpy.view(
+                    -1, self.num_views, tmpy.shape[1], tmpy.shape[2]
                 ).mean(dim=1)
 
         if self.last_op:
-            y = y.swapaxes(0, 1)
-            y = y.unsqueeze(0)
-
             '''           
             Different activation functions for each output variable -> alpha -> sigmoid, (u,v,p) - None, p ->exponential
             (see Buhendwa et al. (2021) - https://doi.org/10.1016/j.mlwa.2021.100029)
             '''
             y = torch.cat(
                 (nn.Sigmoid()(y[:, :1, :]), y[:, 1:2, :], y[:, 2:3, :], y[:, 3:4, :], torch.exp(y[:, 4:5, :])), dim=1)
-            # print('MLP output: ', y)
-            # print('MLP output shape: ', y.size())
 
         return y

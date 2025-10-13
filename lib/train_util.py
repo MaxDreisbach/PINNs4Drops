@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from .mesh_util import *
 from .sample_util import *
+from .physics_util import *
 from .geometry import *
 from .plotting import *
 import cv2
@@ -10,24 +11,6 @@ from tqdm import tqdm
 import os
 import json
 import matplotlib.pyplot as plt
-
-
-def compute_errors(res, labels, norm):
-    eps = 10**(-8)
-    l1_mean = torch.mean(torch.abs(labels - res))
-    l2_mean = torch.sqrt(torch.mean((labels - res) ** 2))
-
-    if norm == 'mean':
-        l1 = torch.sum(torch.abs(labels - res))
-        rel_l1 = l1 / (torch.sum(torch.abs(labels)) + eps)
-        l2 = torch.sqrt(torch.sum((labels - res)**2))
-        rel_l2 = l2 / torch.sqrt(torch.sum(labels**2) + eps)
-    else:
-        rel_l1 = l1_mean / (torch.max(torch.abs(labels)) + eps)
-        rel_l2 = l2_mean / (torch.max(torch.abs(labels)) + eps)
-
-    return l1_mean.item(), rel_l1.item(), l2_mean.item(), rel_l2.item()
-
 
 def reshape_multiview_tensors(image_tensor, calib_tensor):
     # Careful here! Because we put single view and multiview together,
@@ -63,25 +46,47 @@ def reshape_sample_tensor(sample_tensor, num_views):
     return sample_tensor
 
 
-def gen_mesh(opt, net, cuda, data, save_path, use_octree=False, gen_vel_pres=False, gen_3D_iso=False):
+def gen_mesh(opt, net, cuda, data, save_path, use_octree=False, gen_vel_pres=False, gen_3D_iso=False, process_val_data=False):
     image_tensor = data['img'].to(device=cuda)
     calib_tensor = data['calib'].to(device=cuda)
     time_tensor = data['time_step'].to(device=cuda)
+    b_min = data['b_min']
+    b_max = data['b_max']
 
-    #get non-dimensional time
     # Read fluid properties and simulation domain
     with open(os.path.join(opt.dataroot, "flow_case.json"), "r") as f:
         flow_case = json.load(f)
 
-    # non-dimensionalize the label data
-    U_ref = flow_case["U_0"]  # impact velocity
-    L_ref = flow_case["rp"]  # image reproduction scale -> domain size
-    timestep_dimless = time_tensor / (L_ref / U_ref)
+    #U_ref = flow_case["U_0"]  # impact velocity
+    #L_ref = flow_case["rp"]  # image reproduction scale -> domain size
+    rho_1 = flow_case["rho_1"]  # density of inside medium
+    rho_2 = flow_case["rho_2"]  # density of outside medium
+    sigma = flow_case["sigma"]  # surface tension
+    g = flow_case["g"]  # gravity
+
+    # Read experimental conditions
+    with open(os.path.join(opt.test_folder_path, "exp_case.json"), "r") as f:
+        exp_case = json.load(f)
+
+    y_ground = exp_case["ground"]
+    contact_angle = exp_case["theta_eq"]
+    U_ref = exp_case["U_0"]  # impact velocity
+    L_ref = exp_case["rp"]  # image reproduction scale -> domain size
+    
+    if process_val_data:
+        projection_matrix = np.identity(4)
+        projection_matrix[1, 1] = -1
+        calib_tensor = torch.Tensor(projection_matrix).float().unsqueeze(0)
+        calib_tensor = calib_tensor.repeat(opt.num_views, 1, 1).to(device=cuda)
+        b_min = np.array([-1, -1, -1])
+        b_max = np.array([1, 1, 1])
+        # already dimless from dataloader
+        timestep_dimless = time_tensor
+    else:
+        #get non-dimensional time
+        timestep_dimless = time_tensor / (L_ref / U_ref)
 
     net.filter(image_tensor)
-
-    b_min = data['b_min']
-    b_max = data['b_max']
 
     save_img_path = save_path[:-4] + '.png'
     save_img_list = []
@@ -104,18 +109,31 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=False, gen_vel_pres=Fal
         plot_contour_eval(coords, opt, w, sdf, 'z', 'w', 'vel', save_path[:-4])
         plot_contour_eval(coords, opt, p, sdf, 'z', 'p', 'pres', save_path[:-4])
 
+    calc_energies = True
+    if calc_energies:
+        E_surf, E_kin, E_pot = calculate_energy_contributions(opt, coords, sdf, u, v, w, verts, faces, U_ref, L_ref, rho_1, rho_2, sigma, g, y_ground, contact_angle)
+
+        'log energy contributions'
+        energies_log = os.path.join(opt.name + '_energy_contributions.txt')
+        log_message = 'Name: {0} | E_surf: {1} | E_kin: {2} | E_pot: {3} |\n'.format(
+            save_path[:-4], E_surf, E_kin, E_pot)
+        print(log_message)
+        with open(energies_log, 'a') as outfile:
+            outfile.write(log_message)
+
         # plot 3D-contours
     if gen_3D_iso:
+        # only get prediction in liquid phase
+        u = np.multiply(u, sdf)
+        v = np.multiply(v, sdf)
+        w = np.multiply(w, sdf)
+        p = np.multiply(p, sdf)
         plot_iso_surface_eval(opt, coords, sdf, 'Volume fraction [-]', 'vol_frac', 'exp')
         plot_iso_surface_eval(opt, coords, p, 'p [Pa]', 'p', 'exp')
         plot_iso_surface_eval(opt, coords, u, 'u [m/s]', 'u', 'exp')
         plot_iso_surface_eval(opt, coords, v, 'v [m/s]', 'v', 'exp')
         plot_iso_surface_eval(opt, coords, w, 'w [m/s]', 'w', 'exp')
         #gen_vtk_prediction(coords, u, 'u', save_path[:-4])
-        #gen_vtk_prediction(coords, v, 'v', save_path[:-4])
-        #gen_vtk_prediction(coords, w, 'w', save_path[:-4])
-        #gen_vtk_prediction(coords, p, 'p', save_path[:-4])
-
 
     verts_tensor = torch.from_numpy(verts.T).unsqueeze(0).to(device=cuda).float()
     xyz_tensor = net.projection(verts_tensor, calib_tensor[:1])
@@ -124,46 +142,6 @@ def gen_mesh(opt, net, cuda, data, save_path, use_octree=False, gen_vel_pres=Fal
     color = color * 0.5 + 0.5
     save_obj_mesh_with_color(save_path, verts, faces, color)
 
-def gen_mesh_color(opt, netG, netC, cuda, data, save_path, use_octree=True):
-    image_tensor = data['img'].to(device=cuda)
-    calib_tensor = data['calib'].to(device=cuda)
-
-    netG.filter(image_tensor)
-    netC.filter(image_tensor)
-    netC.attach(netG.get_im_feat())
-
-    b_min = data['b_min']
-    b_max = data['b_max']
-    try:
-        save_img_path = save_path[:-4] + '.png'
-        save_img_list = []
-        for v in range(image_tensor.shape[0]):
-            save_img = (np.transpose(image_tensor[v].detach().cpu().numpy(), (1, 2, 0)) * 0.5 + 0.5)[:, :, ::-1] * 255.0
-            save_img_list.append(save_img)
-        save_img = np.concatenate(save_img_list, axis=1)
-        Image.fromarray(np.uint8(save_img[:,:,::-1])).save(save_img_path)
-
-        verts, faces, _, _ = reconstruction(
-            netG, cuda, calib_tensor, opt.resolution, b_min, b_max, use_octree=use_octree)
-
-        # Now Getting colors
-        verts_tensor = torch.from_numpy(verts.T).unsqueeze(0).to(device=cuda).float()
-        verts_tensor = reshape_sample_tensor(verts_tensor, opt.num_views)
-        color = np.zeros(verts.shape)
-        interval = 10000
-        for i in range(len(color) // interval):
-            left = i * interval
-            right = i * interval + interval
-            if i == len(color) // interval - 1:
-                right = -1
-            netC.query(verts_tensor[:, :, left:right], calib_tensor)
-            rgb = netC.get_preds()[0].detach().cpu().numpy() * 0.5 + 0.5
-            color[left:right] = rgb.T
-
-        save_obj_mesh_with_color(save_path, verts, faces, color)
-    except Exception as e:
-        print(e)
-        print('Can not create marching cubes at this time.')
 
 def adjust_learning_rate(optimizer, epoch, lr, schedule, gamma):
     """Sets the learning rate to the initial LR decayed by schedule"""
@@ -200,7 +178,7 @@ def compute_acc(pred, gt, thresh=0.5):
         return true_pos / union, true_pos / vol_pred, true_pos / vol_gt
 
 
-def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plot_results=False):
+def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='train', plot_results=False):
     # Read fluid properties and simulation domain
     with open(os.path.join(opt.dataroot, "flow_case.json"), "r") as f:
         flow_case = json.load(f)
@@ -214,12 +192,19 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
         num_tests = len(dataset)
     with torch.no_grad():
         error_alpha_arr, error_u_arr, error_v_arr, error_w_arr, error_pres_arr, error_conti_arr, error_phase_arr, error_nse_x_arr, error_nse_y_arr, error_nse_z_arr, IOU_arr, prec_arr, recall_arr = [], [], [], [], [], [], [], [], [], [], [], [], []
-        Erel_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_uvp_error_rel_1.txt')
-        Eabs_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_uvp_error_abs_1.txt')
+        Erel_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_' + ds + '_uvp_error_rel.txt')
+        Eabs_log = os.path.join(opt.checkpoints_path, opt.name, str(opt.name) + '_' + ds + '_uvp_error_abs.txt')
+
+        # Initialize error collection for average calculation over entire dataset
+        total_abs_error_u = total_square_error_u = total_abs_lab_u = total_square_lab_u = total_elements_u = 0.0
+        total_abs_error_v = total_square_error_v = total_abs_lab_v = total_square_lab_v = total_elements_v = 0.0
+        total_abs_error_w = total_square_error_w = total_abs_lab_w = total_square_lab_w = total_elements_w = 0.0
+        total_abs_error_p = total_square_error_p = total_abs_lab_p = total_square_lab_p = total_elements_p = 0.0
+        total_abs_error_alpha = total_square_error_alpha = total_abs_lab_alpha = total_square_lab_alpha = total_elements_alpha = 0.0
         for idx in range(num_tests):
             data = dataset[idx * len(dataset) // num_tests]
-            # idx = 5
-            #data = dataset[idx]
+            #idx = 10
+            data = dataset[idx]
 
             # retrieve the data
             name = data['name']
@@ -232,9 +217,10 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
             #sample_tensor_residual = data['samples_residual'].to(device=cuda).unsqueeze(0)
             sample_tensor_uvwp = None
             sample_tensor_residual = None
-            
+
             if opt.num_views > 1:
                 sample_tensor = reshape_sample_tensor(sample_tensor, opt.num_views)
+
             label_tensor = data['labels'].to(device=cuda).unsqueeze(0)
             label_tensor_u = data['labels_u'].to(device=cuda).unsqueeze(0)
             label_tensor_v = data['labels_v'].to(device=cuda).unsqueeze(0)
@@ -250,45 +236,70 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
 
             IOU, prec, recall = compute_acc(res[:, :, :opt.n_data], label_tensor)
 
+            if opt.num_views > 1:
+                # pick middle frame
+                calib_tensor = calib_tensor[opt.num_views // 2: opt.num_views // 2 + 1, :, :]
+                #print('calib_tensor shape: ', calib_tensor.size())
+
             labels_u_proj, labels_w_proj = project_velocity_vector_field(label_tensor_u, label_tensor_w,
                                                                          calib_tensor)
-                                                                         
+            ground_plot = 0                                        
             y = sample_tensor[0, 1, :]
-            label_tensor = label_tensor[0, 0, y > 0]
+            label_tensor = label_tensor[0, 0, y > ground_plot]
             res = res[:, :, :opt.n_data]
-            res = res[0, 0, y > 0]
+            res = res[0, 0, y > ground_plot]
             
             if sample_tensor_uvwp is not None:
                 y = sample_tensor_uvwp[0, 1, :]
             else:
                 y = sample_tensor[0, 1, :]
-            labels_u_proj = labels_u_proj[0, y > 0]
-            label_tensor_v = label_tensor_v[0, y > 0]
-            labels_w_proj = labels_w_proj[0, y > 0]
-            label_tensor_p = label_tensor_p[0, y > 0]
-            sample_x = sample_tensor[0, 0, y > 0]
-            sample_y = sample_tensor[0, 1, y > 0]
-            sample_z = sample_tensor[0, 2, y > 0]
+            labels_u_proj = labels_u_proj[0, y > ground_plot]
+            label_tensor_v = label_tensor_v[0, y > ground_plot]
+            labels_w_proj = labels_w_proj[0, y > ground_plot]
+            label_tensor_p = label_tensor_p[0, y > ground_plot]
+            sample_x = sample_tensor[0, 0, y > ground_plot]
+            sample_y = sample_tensor[0, 1, y > ground_plot]
+            sample_z = sample_tensor[0, 2, y > ground_plot]
             if sample_tensor_uvwp is not None:
                 res_PINN = res_PINN[:, :, opt.n_data:2*opt.n_data]
-                res_PINN = res_PINN[0, :, y > 0]
+                res_PINN = res_PINN[0, :, y > ground_plot]
             else:
-                res_PINN = res_PINN[0, :, y > 0]
+                res_PINN = res_PINN[0, :, y > ground_plot]
             
             #sample_tensor = torch.cat((sample_tensor, sample_tensor_uvwp, sample_tensor_residual),2)
             #print('sample_tensor: ', sample_tensor.shape)                                                            
 
             # retrieve dimensional data for u,v,w,p
-            u_pred = res_PINN[1] * U_ref
-            v_pred = res_PINN[2] * U_ref
-            w_pred = res_PINN[3] * U_ref
-            p_pred = res_PINN[4] * rho_ref * U_ref ** 2
-            pred_dim = torch.stack((res_PINN[0], u_pred, v_pred, w_pred, p_pred))
-
-            u_lab = labels_u_proj * U_ref
-            v_lab = label_tensor_v * U_ref
-            w_lab = labels_w_proj * U_ref
-            p_lab = label_tensor_p * rho_ref * U_ref ** 2
+            EVAL_DROPLET_ONLY = False
+            if EVAL_DROPLET_ONLY:
+                #Consider zero calculation outside droplet 
+                print('Evaluate only fields inside droplet')
+                mask = (label_tensor > 0.5)
+                #print('shape before: ', res_PINN[1].shape)
+                
+                u_pred = res_PINN[1][mask] * U_ref
+                v_pred = res_PINN[2][mask] * U_ref
+                w_pred = res_PINN[3][mask] * U_ref
+                p_pred = res_PINN[4][mask] * rho_ref * U_ref ** 2
+                pred_dim = torch.stack((res_PINN[0][mask], u_pred, v_pred, w_pred, p_pred))
+    
+                u_lab = labels_u_proj[mask] * U_ref
+                v_lab = label_tensor_v[mask] * U_ref
+                w_lab = labels_w_proj[mask] * U_ref
+                p_lab = label_tensor_p[mask] * rho_ref * U_ref ** 2
+                #print('shape before: ', u_pred.shape)
+            else:
+                print('Evaluate fields in complete domain')
+                u_pred = res_PINN[1] * U_ref
+                v_pred = res_PINN[2] * U_ref
+                w_pred = res_PINN[3] * U_ref
+                p_pred = res_PINN[4] * rho_ref * U_ref ** 2
+                pred_dim = torch.stack((res_PINN[0], u_pred, v_pred, w_pred, p_pred))
+    
+                u_lab = labels_u_proj * U_ref
+                v_lab = label_tensor_v * U_ref
+                w_lab = labels_w_proj * U_ref
+                p_lab = label_tensor_p * rho_ref * U_ref ** 2
 
             print('u field mean: ', u_lab.mean().item(), 'max: ', u_lab.max().item(), 'min: ', u_lab.min().item())
             print('v field mean: ', v_lab.mean().item(), 'max: ', v_lab.max().item(), 'min: ', v_lab.min().item())
@@ -325,30 +336,73 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
 
             calc_vel_press_error = True
             if calc_vel_press_error:
-                a_l1m, a_l1, a_l2m, a_l2 = compute_errors(res[0], label_tensor, norm='max')
-                u_l1m, u_l1, u_l2m, u_l2 = compute_errors(u_pred, u_lab, norm='max')
-                v_l1m, v_l1, v_l2m, v_l2 = compute_errors(v_pred, v_lab, norm='max')
-                w_l1m, w_l1, w_l2m, w_l2 = compute_errors(w_pred, w_lab, norm='max')
-                p_l1m, p_l1, p_l2m, p_l2 = compute_errors(p_pred, p_lab, norm='max')
+                a_abs_err, a_square_err, a_abs_lab, a_square_lab, a_num = compute_errors(res[0], label_tensor, norm='mean')
+                u_abs_err, u_square_err, u_abs_lab, u_square_lab, u_num = compute_errors(u_pred, u_lab, norm='mean')
+                v_abs_err, v_square_err, v_abs_lab, v_square_lab, v_num = compute_errors(v_pred, v_lab, norm='mean')
+                w_abs_err, w_square_err, w_abs_lab, w_square_lab, w_num = compute_errors(w_pred, w_lab, norm='mean')
+                p_abs_err, p_square_err, p_abs_lab, p_square_lab, p_num = compute_errors(p_pred, p_lab, norm='mean')
 
-                str_err_1 = '{0}/{1}: {2} | L1_u: {3:06f} | L2_u: {4:06f} | L1_v: {5:06f} | L2_v: {6:06f} | L1_w: {7:06f} | L2_w: {8:06f} | L1_p: {9:06f} | L2_p: {10:06f} | IOU: {11:06f}\n'.format(idx, num_tests, name, u_l1, u_l2, v_l1, v_l2, w_l1, w_l2, p_l1, p_l2, IOU.item())
-                print(str_err_1)
+                str_err_1 = '{0}/{1}: {2} | L1_u: {3:06f} | L2_u: {4:06f} | L1_v: {5:06f} | L2_v: {6:06f} | L1_w: {' \
+                            '7:06f} | L2_w: {8:06f} | L1_p: {9:06f} | L2_p: {10:06f} | IOU: {11:06f}\n'.format(
+                    idx, num_tests, name, u_abs_err, u_square_err, v_abs_err, v_square_err, w_abs_err, w_square_err, p_abs_err, p_square_err, IOU.item())
+                #print(str_err_1)
                 with open(Erel_log, 'a') as outfile:
                     outfile.write(str_err_1)
 
                 str_err_2 = '{0}/{1}: {2} | L1_u: {3:06f} | L2_u: {4:06f} | L1_v: {5:06f} | L2_v: {6:06f} | L1_w: {7:06f} | L2_w: {8:06f} | L1_p: {9:06f} | L2_p: {10:06f} | IOU: {11:06f}\n'.format(
-                    idx, num_tests, name, u_l1m, u_l2m, v_l1m, v_l2m, w_l1m, w_l2m, p_l1m, p_l2m, IOU.item())
-                print(str_err_2)
+                    idx, num_tests, name, u_abs_lab, u_square_lab, v_abs_lab, v_square_lab, w_abs_lab, w_square_lab, p_abs_lab, p_square_lab, IOU.item())
+                #print(str_err_2)
                 with open(Eabs_log, 'a') as outfile:
                     outfile.write(str_err_2)
 
+                l2_rel_a = (a_square_err ** 0.5) / (a_square_lab ** 0.5)
+                l2_rel_u = (u_square_err ** 0.5) / (u_square_lab ** 0.5)
+                l2_rel_v = (v_square_err ** 0.5) / (v_square_lab ** 0.5)
+                l2_rel_w = (w_square_err ** 0.5) / (w_square_lab ** 0.5)
+                l2_rel_p = (p_square_err ** 0.5) / (p_square_lab ** 0.5)
 
-            #print('{0}/{1}: {6} | IOU: {3:06f} | a_MSE: {7:06f} | u_MSE: {8:06f} | v_MSE: {9:06f} | w_MSE: {10:06f} | p_MSE: {11:06f} | conti: {12:06f} | advection: {13:06f} | nse_x: {14:06f} | nse_y: {15:06f} | nse_z: {16:06f}'.format(idx, num_tests, loss.item(), IOU.item(), prec.item(), recall.item(), name, loss_data_alpha.item(), loss_data_u.item(), loss_data_v.item(), loss_data_w.item(), loss_data_p.item(), loss_conti.item(), loss_phase_conv.item(), loss_momentum_x.item(), loss_momentum_y.item(), loss_momentum_z.item()))
-            error_alpha_arr.append(a_l2)
-            error_u_arr.append(u_l2)
-            error_v_arr.append(v_l2)
-            error_w_arr.append(w_l2)
-            error_pres_arr.append(p_l2)
+                str_err_3 = '{0}/{1}: {2} | L2_u: {3:06f} | L2_v: {4:06f} | L2_w: {5:06f} | L2_p: {6:06f} | IOU: {7:06f}\n'.format(
+                    idx, num_tests, name, l2_rel_u, l2_rel_v, l2_rel_w, l2_rel_p, IOU.item())
+                print(str_err_3)
+                with open(Eabs_log, 'a') as outfile:
+                    outfile.write(str_err_2)
+
+                # accumulate errors
+                total_abs_error_alpha += a_abs_err
+                total_square_error_alpha += a_square_err
+                total_abs_lab_alpha += a_abs_lab
+                total_square_lab_alpha += a_square_lab
+                total_elements_alpha += a_num
+
+                total_abs_error_u += u_abs_err
+                total_square_error_u += u_square_err
+                total_abs_lab_u += u_abs_lab
+                total_square_lab_u += u_square_lab
+                total_elements_u += u_num
+
+                total_abs_error_v += v_abs_err
+                total_square_error_v += v_square_err
+                total_abs_lab_v += v_abs_lab
+                total_square_lab_v += v_square_lab
+                total_elements_v += v_num
+
+                total_abs_error_w += w_abs_err
+                total_square_error_w += w_square_err
+                total_abs_lab_w += w_abs_lab
+                total_square_lab_w += w_square_lab
+                total_elements_w += w_num
+
+                total_abs_error_p += p_abs_err
+                total_square_error_p += p_square_err
+                total_abs_lab_p += p_abs_lab
+                total_square_lab_p += p_square_lab
+                total_elements_p += p_num
+
+            error_alpha_arr.append(l2_rel_a)
+            error_u_arr.append(l2_rel_u)
+            error_v_arr.append(l2_rel_v)
+            error_w_arr.append(l2_rel_w)
+            error_pres_arr.append(l2_rel_p)
             error_conti_arr.append(loss_conti.item())
             error_phase_arr.append(loss_phase_conv.item())
             error_nse_x_arr.append(loss_momentum_x.item())
@@ -357,7 +411,30 @@ def calc_error(opt, net, cuda, dataset, num_tests, slice_dim='z', ds='test', plo
             IOU_arr.append(IOU.item())
             prec_arr.append(prec.item())
             recall_arr.append(recall.item())
-    print('All samples: {0}'.format(IOU_arr))
+
+    # Compute dataset-wide metrics
+    print("\n--- Global Dataset Errors ---")
+
+    l1_alpha, rel_l1_alpha, l2_alpha, rel_l2_alpha = compute_global_errors(
+        total_abs_error_alpha, total_square_error_alpha, total_abs_lab_alpha, total_square_lab_alpha,
+        total_elements_alpha)
+    l1_u, rel_l1_u, l2_u, rel_l2_u = compute_global_errors(
+        total_abs_error_u, total_square_error_u, total_abs_lab_u, total_square_lab_u, total_elements_u)
+    l1_v, rel_l1_v, l2_v, rel_l2_v = compute_global_errors(
+        total_abs_error_v, total_square_error_v, total_abs_lab_v, total_square_lab_v, total_elements_v)
+    l1_w, rel_l1_w, l2_w, rel_l2_w = compute_global_errors(
+        total_abs_error_w, total_square_error_w, total_abs_lab_w, total_square_lab_w, total_elements_w)
+    l1_p, rel_l1_p, l2_p, rel_l2_p = compute_global_errors(
+        total_abs_error_p, total_square_error_p, total_abs_lab_p, total_square_lab_p, total_elements_p)
+
+    print(
+        f"Alpha: L1_mean={l1_alpha:.6f}, L2_mean={l2_alpha:.6f}, rel_L1={rel_l1_alpha:.6f}, rel_L2={rel_l2_alpha:.6f}")
+    print(f"U:     L1_mean={l1_u:.6f}, L2_mean={l2_u:.6f}, rel_L1={rel_l1_u:.6f}, rel_L2={rel_l2_u:.6f}")
+    print(f"V:     L1_mean={l1_v:.6f}, L2_mean={l2_v:.6f}, rel_L1={rel_l1_v:.6f}, rel_L2={rel_l2_v:.6f}")
+    print(f"W:     L1_mean={l1_w:.6f}, L2_mean={l2_w:.6f}, rel_L1={rel_l1_w:.6f}, rel_L2={rel_l2_w:.6f}")
+    print(f"P:     L1_mean={l1_p:.6f}, L2_mean={l2_p:.6f}, rel_L1={rel_l1_p:.6f}, rel_L2={rel_l2_p:.6f}")
+
+    #print('All samples: {0}'.format(IOU_arr))
     return np.average(error_alpha_arr), np.average(error_u_arr), np.average(error_v_arr), np.average(error_w_arr), np.average(error_pres_arr), np.average(error_conti_arr), np.average(error_phase_arr), np.average(error_nse_x_arr), np.average(error_nse_y_arr), np.average(error_nse_z_arr), np.average(IOU_arr), np.average(prec_arr), np.average(recall_arr)
 
 def calc_error_color(opt, netG, netC, cuda, dataset, num_tests):

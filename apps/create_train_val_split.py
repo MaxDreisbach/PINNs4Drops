@@ -6,8 +6,8 @@ import fnmatch
 import random
 
 ### Split
-ratio_train = 0.15
-ratio_val = 0.15
+ratio_train = 0.7
+ratio_val = 0.2
 
 
 ### Input dirs
@@ -16,8 +16,6 @@ in_path = "../train_data_DFS2024A/RENDER/"
 
 def pick_random(dnames,out_path):
     n = int((1-ratio_train) * len(dnames))
-    print("val samples, n=")
-    print(n)
     val_test_names = random.sample(dnames, n)
     
     n_val = int(ratio_val * len(dnames))
@@ -26,6 +24,14 @@ def pick_random(dnames,out_path):
     
     val_names.sort()
     test_names.sort()
+    print("test samples, n=", len(test_names))
+    print("val samples, n=", len(val_names))
+    
+    train_names = sorted(list(set(dnames) - set(val_test_names)))
+    print("train samples, n=", len(train_names))
+    print('train samples')
+    print(train_names)
+    exit()
 
     valdir = os.path.join(out_path, 'val.txt')
     testdir = os.path.join(out_path, 'test.txt')

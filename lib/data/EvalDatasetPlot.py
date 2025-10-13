@@ -13,7 +13,7 @@ import trimesh
 import logging
 import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
-
+from natsort import natsorted
 from ..sdf import create_grid
 
 log = logging.getLogger('trimesh')
@@ -169,15 +169,16 @@ class EvalDataset2(Dataset):
     def get_subjects(self):
         all_subjects = os.listdir(self.RENDER)
         val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
+        eval_subjects = np.loadtxt(os.path.join(self.root, 'eval.txt'), dtype=str)
         test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
+
         if len(val_subjects) == 0:
-            return sorted(list(set(all_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(test_subjects)))
 
         if self.is_train:
-            return sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
         else:
-            #return sorted(list(val_subjects))
-            return sorted(list(test_subjects))
+            return natsorted(list(eval_subjects))
 
     def __len__(self):
         return len(self.subjects) * len(self.yaw_list) * len(self.pitch_list)

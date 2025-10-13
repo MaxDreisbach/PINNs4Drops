@@ -19,6 +19,7 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, labels_alpha, plane
     label_alpha = labels_alpha.detach().cpu().numpy()
     pred = preds.detach().cpu().numpy()
     alpha = alpha.detach().cpu().numpy()
+    
     # interpolate point cloud to 2D-plane
     grid_res = complex(0, opt.resolution)
     if plane_dim == 'x':
@@ -97,6 +98,15 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, labels_alpha, plane
     p1 = axs[0].contourf(x, y, var_plot, levels=levels, cmap=colormap, linestyles='none')
     p2 = axs[1].contourf(x, y, gt_plot, levels=levels, cmap=colormap, linestyles='none')
     p3 = axs[2].contourf(x, y, err_plot, levels=levels_err, cmap='viridis', linestyles='none')
+    
+    for c in p1.collections:
+        c.set_edgecolor("face")
+        
+    for c in p2.collections:
+        c.set_edgecolor("face")
+    
+    for c in p2.collections:
+        c.set_edgecolor("face")
 
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
@@ -145,6 +155,7 @@ def plot_contour_w_alpha(opt, samples, preds, alpha, labels, labels_alpha, plane
 
     filename = 'results/' + opt.name + '/pred_fields/'  + dataset_type + '_' + sample_name + '_' + name + '_' + plane_dim + '_pred.pdf'
     plt.savefig(filename)
+    #plt.savefig(filename, dpi=300, bbox_inches='tight')
     #plt.show()
     plt.close(fig)
 
@@ -381,6 +392,12 @@ def plot_compound(opt, samples, res_PINN, labels_alpha, labels_u, labels_v, labe
     fig, axs = plt.subplots(nrows=1, ncols=2, sharex=False, sharey=True, figsize=(10, 6.85))
     p1 = axs[0].contourf(x, y, p_plot, levels=levels, cmap=colormap)
     p2 = axs[1].contourf(x, y, label_p_plot, levels=levels, cmap=colormap)
+    
+    for c in p1.collections:
+        c.set_edgecolor("face")
+        
+    for c in p2.collections:
+        c.set_edgecolor("face")
 
     levels_alpha = np.linspace(0.5, 1.0, 2)
     a1 = axs[0].contour(x, y, alpha_plot, levels=levels_alpha, colors='k')
@@ -696,7 +713,7 @@ def plot_contour_eval(coords, opt, preds, alpha, plane_dim, name, type, sample_n
     ind = opt.resolution // 2
     
     # mask out prediction in solid domain
-    ground = 17 # for FDM
+    ground = 0 # for FDM
     ground_index = int(ground * opt.resolution / 256)
     preds[:, :int(ground_index * opt.resolution / 256), :] = 0
 
@@ -793,7 +810,7 @@ def plot_data_sample(x, y, z, labels, vmin, vmax):
     X = x.detach().cpu().numpy()
     Y = y.detach().cpu().numpy()
     Z = z.detach().cpu().numpy()
-    var_plot = labels[0, :].detach().cpu().numpy()
+    var_plot = labels[0,:, :].detach().cpu().numpy()
 
     mappable = ax.scatter(X, Y, Z, s=5, c=var_plot, vmin=vmin, vmax=vmax, cmap='bwr')
     plt.colorbar(mappable)

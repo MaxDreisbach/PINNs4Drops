@@ -13,13 +13,14 @@ import trimesh
 import logging
 import matplotlib.pyplot as plt
 from scipy.interpolate import interpn
-
+from natsort import natsorted
 from lib.sample_util import *
 
 log = logging.getLogger('trimesh')
 log.setLevel(40)
-ONLINE_MESH_LOAD = True
 PLOTTING = False
+PLOT_SAMPLING = False
+PLOT_INPUT = False
 
 def load_trimesh(root_dir):
     folders = os.listdir(root_dir)
@@ -47,28 +48,28 @@ class TrainDataset(Dataset):
     def __init__(self, opt, phase='train'):
         self.opt = opt
         self.projection_mode = 'orthogonal'
+        self.is_train = (phase == 'train')
+        self.load_size = self.opt.loadSize
 
         # Path setup
         self.root = self.opt.dataroot
+        print(self.root)
         if self.opt.RGB:
-            #self.RENDER = os.path.join('./train_data_DFS2024A', 'RENDER')
             self.RENDER = os.path.join('../PIFu-master/train_data_DFS2023C', 'RENDER')
         else:
             self.RENDER = os.path.join(self.root, 'RENDER')
 
-
         self.MASK = os.path.join('../PINN-PIFu/train_data_DFS2024D/MASK')
         self.OBJ = os.path.join('../PIFu-master/train_data_DFS2023C', 'GEO', 'OBJ')
         self.PARAM = os.path.join('../PIFu-master/train_data_DFS2023C/PARAM')
-        
-        print('Path setup: \n', self.RENDER, self.MASK, self.OBJ, self.PARAM)
-        
+        if self.is_train:
+            print('Path setup: \n', self.RENDER, ' \n', self.MASK, ' \n', self.OBJ, ' \n', self.PARAM)
+
         self.UV_MASK = os.path.join('../PIFu-master/train_data_DFS2023C/UV_MASK')
         self.UV_NORMAL = os.path.join('../PIFu-master/train_data_DFS2023C/UV_NORMAL')
         self.UV_RENDER = os.path.join('../PIFu-master/train_data_DFS2023C/UV_RENDER')
         self.UV_POS = os.path.join('../PIFu-master/train_data_DFS2023C/UV_POS')
-        
-        
+
         self.VEL = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'VEL')
         self.PRES = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'PRES')
         self.TIME = os.path.join('../PINN-PIFu/train_data_DFS2024D', 'TIME')
@@ -115,24 +116,17 @@ class TrainDataset(Dataset):
 
     def get_subjects(self):
         all_subjects = os.listdir(self.RENDER)
-        if self.small_data_partition:
-            print('training on small data partition')
-            val_subjects = np.loadtxt(os.path.join(self.root, 'train_val_split_small/val.txt'), dtype=str)
-            test_subjects = np.loadtxt(os.path.join(self.root, 'train_val_split_small/test.txt'), dtype=str)
-        else:
-            print('training on full dataset')
-            val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
-            test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
+        val_subjects = np.loadtxt(os.path.join(self.root, 'val.txt'), dtype=str)
+        eval_subjects = np.loadtxt(os.path.join(self.root, 'eval.txt'), dtype=str)
+        test_subjects = np.loadtxt(os.path.join(self.root, 'test.txt'), dtype=str)
 
         if len(val_subjects) == 0:
-            return sorted(list(set(all_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(test_subjects)))
 
         if self.is_train:
-            # print(sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects))))
-            return sorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
+            return natsorted(list(set(all_subjects) - set(val_subjects) - set(test_subjects)))
         else:
-            # print(sorted(list(set(val_subjects))))
-            return sorted(list(val_subjects))
+            return natsorted(list(eval_subjects))
 
     def __len__(self):
         return len(self.subjects) * len(self.yaw_list) * len(self.pitch_list)
@@ -276,8 +270,8 @@ class TrainDataset(Dataset):
 
     def select_sampling_method(self, subject):
         # for testing - consider specific time step
-        # subject = '1010'
-        # subject = 'droplet0_1'        
+        # subject = '1015'
+        # subject = 'droplet0_10'
         '''
         returns samples and labels for (alpha,u,v,w,p) in B_MIN,B_MAX - [256,256,256] domain
         '''
@@ -286,29 +280,21 @@ class TrainDataset(Dataset):
             np.random.seed(1991)
             torch.manual_seed(1991)
 
-        # load meshes during runtime instead of a-priori
-        if not ONLINE_MESH_LOAD:
-            # print(subject)
-            mesh = self.mesh_dic[subject]
+        mesh = trimesh.load(os.path.join(self.OBJ, subject, '%s.obj' % subject))
+        
+        ''' Option to sample uvwp data points and residual points with 16:1 ratio around interface like occupancy sampling '''
+        all_samples_16_1 = True
+        if all_samples_16_1:
+            samples, labels, uvwp_samples, residual_samples = sample_occupancy_points(mesh, self.B_MIN, self.B_MAX, self.opt.sigma, num_occupancy=self.n_data, num_uvwp=self.n_data, num_residuals=self.n_residual)
         else:
-            # print('Online loading of mesh %s during query point sampling' % subject)
-            mesh = trimesh.load(os.path.join(self.OBJ, subject, '%s.obj' % subject))
+            samples, labels, uvwp_samples, residual_samples = sample_occupancy_points_16_1(mesh, self.B_MIN, self.B_MAX, self.opt.sigma, num_occupancy=self.n_data, num_uvwp=self.n_data, num_residuals=self.n_residual)
 
-        samples, labels, uvwp_samples, residual_samples = sample_occupancy_points(mesh, self.B_MIN, self.B_MAX, self.opt.sigma, num_occupancy=self.n_data, num_uvwp=self.n_data, num_residuals=self.n_residual )
-
-        ''' Added time step read in'''
+        ''' time step read in'''
         timestep_path = os.path.join(self.TIME, subject, 'time_step.txt')
         with open(timestep_path) as f:
             t = f.readline().strip('\n')
 
         timestep = torch.tensor([float(t)])
-
-        '''
-        PINN: Shuffle the samples and according labels in a random order -> for later sampling of (u,v,w,p) data loss points
-        '''
-        idx = torch.randperm(samples.shape[1])
-        samples = samples[:, idx]
-        labels = labels[:, idx]
 
         samples = torch.Tensor(samples).float()
         uvwp_samples = torch.Tensor(uvwp_samples).float()
@@ -346,9 +332,6 @@ class TrainDataset(Dataset):
         z = np.linspace(z_min, z_max, flow_case["z_res"])
         grid_points = (x, y, z)
 
-        # Limit number of data points (u,v,w,p) to amount of sampling points
-        #if self.n_data >= samples.size(dim=1):
-        #    self.n_data = samples.size(dim=1)
 
         # actual interpolation from grid to continuous point cloud
         samplesT = np.transpose(uvwp_samples, (1, 0))
@@ -358,7 +341,8 @@ class TrainDataset(Dataset):
         labels_p = interpn(grid_points, p_grid, samplesT[:, :], bounds_error=False, fill_value=0)
         # labels_c = interpn(grid_points, c_grid, samplesT[:self.n_vel_pres_data, :], bounds_error=False, fill_value=0)
 
-        # rotate vector field to match PINN domain (x,y,z) -> (x,z,y)
+        # rotate vector field to match PINN domain (x,y,z) -> (y,z,x)
+        # Careful! this depends on the definition of the KOS and might be different for other datasets
         labels_u_r = labels_u
         labels_v_r = labels_w
         labels_w_r = labels_v
@@ -374,8 +358,6 @@ class TrainDataset(Dataset):
         # Plotting for debug
         if PLOTTING:
             import matplotlib.pyplot as plt
-            # from mpl_toolkits.mplot3d import proj3d
-
             fig = plt.figure(figsize=(8, 8))
             ax = fig.add_subplot(111, projection='3d')
 
@@ -409,9 +391,6 @@ class TrainDataset(Dataset):
             ax.set_xlabel('$X$')
             ax.set_ylabel('$Y$')
             ax.set_zlabel('$Z$')
-            # ax.set_xlim3d(x_min, x_max)
-            # ax.set_ylim3d(y_min, y_ground)
-            # ax.set_zlim3d(z_min, z_max)
             ax.set_box_aspect((1, 1, 1))
             plt.show()
 

@@ -6,34 +6,44 @@ from lib.options import BaseOptions
 opt = BaseOptions().parse()
 
 
-def get_loss_weights_SoftAdapt(losses, losses_prev, beta=0.1, var_lw=False):
+def get_loss_weights_SoftAdapt(losses, losses_prev, beta=10.0, use_ratio=False, use_loss_weighted=False):
     ''' Implementation of SoftAdapt in two variants
-    1) SoftAdapt based on loss ratios (https://docs.nvidia.com/deeplearning/modulus/modulus-v2209/user_guide/theory/advanced_schemes.html)
-    2) Loss weighted Softadapt according to original paper
-    The second variant assigns smaller weights to lower loss terms, which makes sense if all losses are expected to reach a similar magnitude
-    Since the PDE losses should be lower than the data losses the first variant is used as default
+    1) Softadapt according to original paper (https://arxiv.org/pdf/1912.12355)
+    2) SoftAdapt based on loss ratios (https://docs.nvidia.com/deeplearning/modulus/modulus-v2209/user_guide/theory/advanced_schemes.html)
+    Loss weighted SoftAdapt assigns smaller weights to lower loss terms, which makes sense if all losses are expected to reach a similar magnitude
+    Since the PDE losses should be lower than the data losses the original SoftAdapt is used as default
     Note: a small value (eps) is added to divisions for numerical stability'''
-    eps = 10 ** (-8)
 
+    eps = 10 ** (-8)
     losses = losses.detach().clone()
     losses_prev = losses_prev.detach().clone()
+    num_loss_terms = len(losses)
+    
+    print('losses: ', losses)
+    print('losses_prev: ', losses_prev)
 
-    if var_lw:
-        diff_losses = losses - losses_prev + eps
-        weights = nn.Softmax(dim=0)(beta * diff_losses - torch.max(diff_losses))
-        losses_mean = torch.mean(torch.stack((losses, losses_prev), dim=1), dim=1)
-        weights = losses_mean * weights / torch.sum((losses_mean * weights + eps))
-    else:
+    if use_ratio:
+        # SoftAdapt based on loss ratios
         ratio_losses = losses / (losses_prev + eps)
-        weights = nn.Softmax(dim=0)(ratio_losses - torch.max(ratio_losses))
+        weights = torch.softmax(ratio_losses - torch.max(ratio_losses), dim=0)
+    else:
+        #original SoftAdapt
+        s = losses - losses_prev
+        weights = torch.softmax(beta * (s - torch.max(s)), dim=0)
+        if use_loss_weighted:
+            #Loss weighted SoftAdapt
+            f = torch.mean(torch.stack((losses, losses_prev), dim=1), dim=1)
+            weights = f * weights / (torch.sum(f * weights) + eps)
 
     # NEW: make sure that alpha field loss does not drop - either assign max(weights) or 1/10 if w_alpha < 1/10
-    w_alpha_lim = 0.1
+    w_alpha_lim = 1 / num_loss_terms
     if weights[0] <= w_alpha_lim:
         # weights[0] = torch.max(weights)
         weights[0] = w_alpha_lim
+        
+    print('weights: ', weights * num_loss_terms)
 
-    return weights * 10
+    return weights * num_loss_terms
 
 
 def get_EWMA(loss, prev_EWMA, iteration, epoch, opt, beta=0.9):
@@ -43,13 +53,10 @@ def get_EWMA(loss, prev_EWMA, iteration, epoch, opt, beta=0.9):
 
     loss = loss.detach().clone()
 
-    if iteration == 0 and epoch == 0:
-        losses_EWMA = torch.ones_like(loss)
-    elif iteration == 0 and epoch == opt.resume_epoch:
-        losses_EWMA = torch.ones_like(loss)
+    if iteration == 0 and (epoch == 0 or epoch == opt.resume_epoch):
+        losses_EWMA = loss.clone()
     else:
         losses_EWMA = beta * prev_EWMA + (1 - beta) * loss
-
     return losses_EWMA
 
 
@@ -84,6 +91,23 @@ def assign_global_weights_CH2(l_a, l_u, l_v, l_w, l_p, l_c, l_ph, l_x, l_y, l_z,
     l_phi = opt.weight_phi * l_phi
 
     return torch.stack((l_a, l_u, l_v, l_w, l_p, l_c, l_ph, l_x, l_y, l_z, l_e, l_phi), dim=0)
+
+
+def assign_global_weights_AC(l_a, l_u, l_v, l_w, l_p, l_c, l_ph, l_x, l_y, l_z, l_e, l_S, opt):
+    ''' apply global loss weights to each loss term (Cahn-Hilliard version)'''
+    l_u = opt.weight_u * l_u
+    l_v = opt.weight_v * l_v
+    l_w = opt.weight_w * l_w
+    l_p = opt.weight_p * l_p
+    l_c = opt.weight_conti * l_c
+    l_ph = opt.weight_phase * l_ph
+    l_x = opt.weight_mom_x * l_x
+    l_y = opt.weight_mom_y * l_y
+    l_z = opt.weight_mom_z * l_z
+    l_e = opt.weight_l_eps * l_e
+    l_S = opt.weight_S * l_S
+
+    return torch.stack((l_a, l_u, l_v, l_w, l_p, l_c, l_ph, l_x, l_y, l_z, l_e, l_S), dim=0)
 
 
 def get_data_loss_onramp(losses, iteration, epoch, duration=1000):
@@ -202,3 +226,37 @@ def get_loss_weights_mag_CH2(losses):
     w_phi = torch.clip(total_loss_pde / (l_phi + eps), 0.01, 50.0)
 
     return torch.squeeze(torch.stack((w_a, w_u, w_v, w_w, w_p, w_c, w_ph, w_x, w_y, w_z, w_l, w_phi), dim=0))
+
+def detect_faulty_derivative(self, grad, name):
+    error_log = 'error_log.txt'
+    faulty_grad = 0
+    alpha = self.pred[0, 0, :]
+
+    if torch.any(grad.isnan()):
+        print('at least one value of %s is nan' % name)
+        print(grad[grad.isnan()])
+        print('Occupancy field is: ', alpha[grad.isnan()])
+        faulty_grad = 1
+        # write error log
+        with open(error_log, 'w') as outfile:
+            outfile.write('at least one value of %s is nan \n' % name)
+            outfile.write(str(grad[grad.isnan()]))
+            outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
+
+    if torch.any(grad.isinf()):
+        print('at least one value of %s is inf' % name)
+        print(grad[grad.isinf()])
+        print('Occupancy field is: ', alpha[grad.isinf()])
+        faulty_grad = 2
+        with open(error_log, 'w') as outfile:
+            outfile.write('at least one value of %s is inf \n' % name)
+            outfile.write(str(grad[grad.isinf()]))
+            outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
+
+    # if not grad.all():
+    #    print('at least one value of %s is zero' % name)
+    #    print(grad[grad == 0])
+    #    print('Occupancy field is: ', alpha[grad == 0])
+    #    faulty_grad = 3
+
+    return faulty_grad

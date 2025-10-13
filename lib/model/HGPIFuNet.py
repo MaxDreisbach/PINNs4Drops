@@ -19,6 +19,13 @@ from ..plotting import plot_data_sample
 from ..plotting import plot_im_feat
 
 
+def check_nan(tensor, name):
+        if torch.isnan(tensor).any():
+            print(f"NaN detected in {name}")
+            return True
+        return False
+
+
 def normalize(data, min, max):
     '''min-max normalization'''
     return (data - min) / (max - min)
@@ -150,12 +157,15 @@ class HGPIFuNet(BasePIFuNet):
         init_net(self)
 
     def nth_derivative(self,f, wrt, n):
+        #f = f[:, :, self.n_data*2:]
+        #wrt = wrt[:, :, self.n_data*2:]
         for i in range(n):
             grads = grad(f, wrt, grad_outputs=torch.ones_like(f), create_graph=True, allow_unused=True)[0]
             f = grads
             if grads is None:
-                print('bad grad')
-                return torch.tensor(0.)
+                print(f"[Error] Gradient is None at order {i + 1}.")
+                return torch.tensor(0., device=f.device)
+        #return only the grads for the pde sampling points             
         return grads[:, :, self.n_data*2:]
 
     def diff_xyz_de_norm(self, data):
@@ -227,9 +237,15 @@ class HGPIFuNet(BasePIFuNet):
             self.labels = labels
 
         if labels_u is not None and labels_v is not None and labels_w is not None:
-            #plot_data_sample(points[:, :1, :], points[:, 1:2, :], points[:, 2:3, :], labels_u, -2.0, 2.0)
             labels_u_proj, labels_w_proj = project_velocity_vector_field(labels_u, labels_w, calibs)
-            #plot_data_sample(points[:, :1, :], points[:, 1:2, :], points[:, 2:3, :], labels_u_proj, -2.0, 2.0)
+
+            #p_plot = points[:1, :, self.n_data:self.n_data * 2]
+            #print('Plotting u')
+            #plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_u, -2.0, 2.0)
+            #print('Plotting v')
+            #plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_v, -2.0, 2.0)
+            #print('Plotting w')
+            #plot_data_sample(p_plot[:, :1, :], p_plot[:, 1:2, :], p_plot[:, 2:3, :], labels_w, -2.0, 2.0)
 
             # normalizing the label data
             labels_u_proj = normalize(labels_u_proj, self.umin, self.umax)
@@ -258,16 +274,10 @@ class HGPIFuNet(BasePIFuNet):
         xy = xyz[:, :2, :]
         in_img = (xy[:, 0] >= -1.0) & (xy[:, 0] <= 1.0) & (xy[:, 1] >= -1.0) & (xy[:, 1] <= 1.0)
 
-        '''non-dimensionalize coordinates
-        Flip y-axis - required as it was flipped in TrainDataset'''
-        x_non_dim = xyz[:, :1, :] / self.L_ref
-        y_non_dim = -xyz[:, 1:2, :] / self.L_ref
-        z_non_dim = xyz[:, 2:3, :] / self.L_ref
-
-        '''Normalize data to [0,1] by min-max-normalization'''
-        self.x_feat = normalize(x_non_dim, self.xmin, self.xmax)
-        self.y_feat = normalize(y_non_dim, self.xmin, self.xmax)
-        self.z_feat = normalize(z_non_dim, self.xmin, self.xmax)
+        '''Flip y-axis - required as it was flipped in TrainDataset'''
+        self.x_feat = xyz[:, :1, :]
+        self.y_feat = -xyz[:, 1:2, :]
+        self.z_feat = xyz[:, 2:3, :]
         self.x_feat.requires_grad = True
         self.y_feat.requires_grad = True
         self.z_feat.requires_grad = True
@@ -306,19 +316,15 @@ class HGPIFuNet(BasePIFuNet):
 
 
     def get_solid_domain_mask(self, points):
-        ground_mask = torch.zeros_like(points[:, :1, :])
-        for i in range(points.shape[-1]):
-            if points[:, 1, i] >= self.y_ground:
-                ground_mask[:, :, i] = 1
-            else:
-                ground_mask[:, :, i] = 0
-        return ground_mask
+        y_coords = points[:, 1:2, :]  # Get y-coordinates
+        mask = (y_coords >= self.y_ground).float()
+        return mask
 
 
-    def get_RBA_residual(self,  residuals):
+    def get_RBA_residual(self, residuals):
         res_max = torch.max(torch.squeeze(torch.abs(residuals)))
-        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / res_max.item()
-        # print('Residuals maximum: ', res_max.item())
+        lambda_k = self.RBA_b + self.RBA_lr * torch.abs(residuals) / (res_max.item() + 1e-8)
+        #print('Residuals maximum: ', res_max.item())
         #print('Lagrange multipliers min: ', torch.min(lambda_k).item(), ' max: ', torch.max(lambda_k).item(), ' mean: ', torch.mean(lambda_k).item())
         #print('Lagrange multipliers: ', lambda_k)
         #print('Lagrange multipliers shape: ', lambda_k.size())
@@ -349,7 +355,6 @@ class HGPIFuNet(BasePIFuNet):
         if points is not None:
             n_start = self.n_data
             n_end = self.n_data * 2
-
             # get prediction for observation points
             pred_u = self.pred[:, 1, n_start:n_end]
             pred_v = self.pred[:, 2, n_start:n_end]
@@ -357,7 +362,6 @@ class HGPIFuNet(BasePIFuNet):
 
             # Do not calculate loss for sample points below surface in solid domain and within grooves
             mask = self.get_solid_domain_mask(points)
-            #mask = ground_mask[:, :, n_start:n_end]
             error_u = self.error_term(pred_u * mask, self.labels_u * mask)
             error_v = self.error_term(pred_v * mask, self.labels_v * mask)
             error_w = self.error_term(pred_w * mask, self.labels_w * mask)
@@ -387,41 +391,6 @@ class HGPIFuNet(BasePIFuNet):
         return error_p
 
 
-    def detect_faulty_derivative(self, grad, name):
-        error_log = 'error_log.txt'
-        faulty_grad = 0
-        alpha = self.pred[0, 0, :]
-
-        if torch.any(grad.isnan()):
-            print('at least one value of %s is nan' % name)
-            print(grad[grad.isnan()])
-            print('Occupancy field is: ', alpha[grad.isnan()])
-            faulty_grad = 1
-            # write error log
-            with open(error_log, 'w') as outfile:
-                outfile.write('at least one value of %s is nan \n' % name)
-                outfile.write(str(grad[grad.isnan()]))
-                outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
-
-        if torch.any(grad.isinf()):
-            print('at least one value of %s is inf' % name)
-            print(grad[grad.isinf()])
-            print('Occupancy field is: ', alpha[grad.isinf()])
-            faulty_grad = 2
-            with open(error_log, 'w') as outfile:
-                outfile.write('at least one value of %s is inf \n' % name)
-                outfile.write(str(grad[grad.isinf()]))
-                outfile.write('\n Occupancy field is: %s' % alpha[grad.isnan()])
-
-        # if not grad.all():
-        #    print('at least one value of %s is zero' % name)
-        #    print(grad[grad == 0])
-        #    print('Occupancy field is: ', alpha[grad == 0])
-        #    faulty_grad = 3
-
-        return faulty_grad
-
-
     def get_pde_loss(self, points):
         '''
         Calculates MSE-loss of the phase advection equation and the Navier-Stokes equations (continuity and momentum equations in x,y,z)
@@ -430,11 +399,11 @@ class HGPIFuNet(BasePIFuNet):
         n_start = self.n_data * 2
 
         # get prediction for collocation points
-        alpha = self.preds[0, 0, n_start:]  # preds instead of pred to get masking of alpha
-        u = self.pred[0, 1, n_start:]
-        v = self.pred[0, 2, n_start:]
-        w = self.pred[0, 3, n_start:]
-        p = self.pred[0, 4, n_start:]
+        alpha = self.preds[:1, :1, n_start:]  # preds instead of pred to get masking of alpha
+        u = self.pred[:1, 1:2, n_start:]
+        v = self.pred[:1, 2:3, n_start:]
+        w = self.pred[:1, 3:4, n_start:]
+        p = self.pred[:1, 4:5, n_start:]
 
         # get de-normed dimensionless quantities
         u = de_norm(u, self.umin, self.umax)
@@ -447,43 +416,43 @@ class HGPIFuNet(BasePIFuNet):
 
         # derivatives
         alpha_t = self.diff_t_de_norm(self.nth_derivative(alpha, wrt=self.t, n=1))
-        alpha_x = self.diff_xyz_de_norm(self.nth_derivative(alpha, wrt=self.x, n=1))
-        alpha_y = self.diff_xyz_de_norm(self.nth_derivative(alpha, wrt=self.y, n=1))
-        alpha_z = self.diff_xyz_de_norm(self.nth_derivative(alpha, wrt=self.z, n=1))
-        alpha_xx = self.diff_xyz_de_norm(self.nth_derivative(alpha_x, wrt=self.x, n=1))
-        alpha_yy = self.diff_xyz_de_norm(self.nth_derivative(alpha_y, wrt=self.y, n=1))
-        alpha_zz = self.diff_xyz_de_norm(self.nth_derivative(alpha_z, wrt=self.z, n=1))
-        alpha_xy = self.diff_xyz_de_norm(self.nth_derivative(alpha_x, wrt=self.y, n=1))
-        alpha_xz = self.diff_xyz_de_norm(self.nth_derivative(alpha_x, wrt=self.z, n=1))
-        alpha_yz = self.diff_xyz_de_norm(self.nth_derivative(alpha_y, wrt=self.z, n=1))
+        alpha_x = self.nth_derivative(alpha, wrt=self.x, n=1)
+        alpha_y = self.nth_derivative(alpha, wrt=self.y, n=1)
+        alpha_z = self.nth_derivative(alpha, wrt=self.z, n=1)
+        alpha_xx = self.nth_derivative(alpha_x, wrt=self.x, n=1)
+        alpha_yy = self.nth_derivative(alpha_y, wrt=self.y, n=1)
+        alpha_zz = self.nth_derivative(alpha_z, wrt=self.z, n=1)
+        alpha_xy = self.nth_derivative(alpha_x, wrt=self.y, n=1)
+        alpha_xz = self.nth_derivative(alpha_x, wrt=self.z, n=1)
+        alpha_yz = self.nth_derivative(alpha_y, wrt=self.z, n=1)
 
         u_t = self.diff_t_de_norm(self.nth_derivative(u, wrt=self.t, n=1))
-        u_x = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.x, n=1))
-        u_y = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.y, n=1))
-        u_z = self.diff_xyz_de_norm(self.nth_derivative(u, wrt=self.z, n=1))
-        u_xx = self.diff_xyz_de_norm(self.nth_derivative(u_x, wrt=self.x, n=1))
-        u_yy = self.diff_xyz_de_norm(self.nth_derivative(u_y, wrt=self.y, n=1))
-        u_zz = self.diff_xyz_de_norm(self.nth_derivative(u_z, wrt=self.z, n=1))
+        u_x = self.nth_derivative(u, wrt=self.x, n=1)
+        u_y = self.nth_derivative(u, wrt=self.y, n=1)
+        u_z = self.nth_derivative(u, wrt=self.z, n=1)
+        u_xx = self.nth_derivative(u_x, wrt=self.x, n=1)
+        u_yy = self.nth_derivative(u_y, wrt=self.y, n=1)
+        u_zz = self.nth_derivative(u_z, wrt=self.z, n=1)
 
         v_t = self.diff_t_de_norm(self.nth_derivative(v, wrt=self.t, n=1))
-        v_x = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.x, n=1))
-        v_y = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.y, n=1))
-        v_z = self.diff_xyz_de_norm(self.nth_derivative(v, wrt=self.z, n=1))
-        v_xx = self.diff_xyz_de_norm(self.nth_derivative(v_x, wrt=self.x, n=1))
-        v_yy = self.diff_xyz_de_norm(self.nth_derivative(v_y, wrt=self.y, n=1))
-        v_zz = self.diff_xyz_de_norm(self.nth_derivative(v_z, wrt=self.z, n=1))
+        v_x = self.nth_derivative(v, wrt=self.x, n=1)
+        v_y = self.nth_derivative(v, wrt=self.y, n=1)
+        v_z = self.nth_derivative(v, wrt=self.z, n=1)
+        v_xx = self.nth_derivative(v_x, wrt=self.x, n=1)
+        v_yy = self.nth_derivative(v_y, wrt=self.y, n=1)
+        v_zz = self.nth_derivative(v_z, wrt=self.z, n=1)
 
         w_t = self.diff_t_de_norm(self.nth_derivative(w, wrt=self.t, n=1))
-        w_x = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.x, n=1))
-        w_y = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.y, n=1))
-        w_z = self.diff_xyz_de_norm(self.nth_derivative(w, wrt=self.z, n=1))
-        w_xx = self.diff_xyz_de_norm(self.nth_derivative(w_x, wrt=self.x, n=1))
-        w_yy = self.diff_xyz_de_norm(self.nth_derivative(w_y, wrt=self.y, n=1))
-        w_zz = self.diff_xyz_de_norm(self.nth_derivative(w_z, wrt=self.z, n=1))
+        w_x = self.nth_derivative(w, wrt=self.x, n=1)
+        w_y = self.nth_derivative(w, wrt=self.y, n=1)
+        w_z = self.nth_derivative(w, wrt=self.z, n=1)
+        w_xx = self.nth_derivative(w_x, wrt=self.x, n=1)
+        w_yy = self.nth_derivative(w_y, wrt=self.y, n=1)
+        w_zz = self.nth_derivative(w_z, wrt=self.z, n=1)
 
-        p_x = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.x, n=1))
-        p_y = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.y, n=1))
-        p_z = self.diff_xyz_de_norm(self.nth_derivative(p, wrt=self.z, n=1))
+        p_x = self.nth_derivative(p, wrt=self.x, n=1)
+        p_y = self.nth_derivative(p, wrt=self.y, n=1)
+        p_z = self.nth_derivative(p, wrt=self.z, n=1)
 
         # mixture density, viscosity
         rho_M = alpha * self.rho_1 + (1 - alpha) * self.rho_2
@@ -532,20 +501,6 @@ class HGPIFuNet(BasePIFuNet):
                 w_xx + w_yy + w_zz) - 2 * one_Re_z * w_z - one_Re_y * (v_z + w_y) - one_Re_x * (
                                       u_z + w_x) - f_sigma_z
 
-        ''' Debug momentum in x'''
-        #t_t = rho_M / self.rho_ref * u_t
-        #t_c = rho_M / self.rho_ref * (u * u_x + v * u_y + w * u_z)
-        #t_p = p_x
-        #t_d = one_Re * (u_xx + u_yy + u_zz) + 2 * one_Re_x * u_x + one_Re_y * (u_y + v_x) + one_Re_z * (u_z + w_x)
-        #t_s = f_sigma_x
-
-        #print('temporal term: ', torch.min(t_t).item(), ' max: ', torch.max(t_t).item(), ' mean: ',torch.mean(t_t).item())
-        #print('convective term: ', torch.min(t_c).item(), ' max: ', torch.max(t_c).item(), ' mean: ',torch.mean(t_c).item())
-        #print('pressure term: ', torch.min(t_p).item(), ' max: ', torch.max(t_p).item(), ' mean: ',torch.mean(t_p).item())
-        #print('diffusive term: ',  torch.min(t_d).item(), ' max: ', torch.max(t_d).item(), ' mean: ',torch.mean(t_d).item())
-        #print('surface tension: ', torch.min(t_s).item(), ' max: ', torch.max(t_s).item(), ' mean: ',torch.mean(t_s).item())
-
-
         ''' Phase field advection and continuity equation resi'''
         res_phase_adv = alpha_t + u * alpha_x + v * alpha_y + w * alpha_z
         res_conti = u_x + v_y + w_z
@@ -560,13 +515,19 @@ class HGPIFuNet(BasePIFuNet):
         res_phase_adv = res_phase_adv * mask
         res_conti = res_conti * mask
 
-
         # get RBA update with local Lagrange multipliers
         res_momentum_x, RBA_mom_x = self.get_RBA_residual(res_momentum_x)
         res_momentum_y, RBA_mom_y = self.get_RBA_residual(res_momentum_y)
         res_momentum_z, RBA_mom_z = self.get_RBA_residual(res_momentum_z)
         res_phase_adv, RBA_phase_adv = self.get_RBA_residual(res_phase_adv)
         res_conti, RBA_conti = self.get_RBA_residual(res_conti)
+        
+        #print('--- After residual weighting --- ')
+        #check_nan(res_momentum_x, "res_momentum_x")
+        #check_nan(res_momentum_y, "res_momentum_y")
+        #check_nan(res_momentum_z, "res_momentum_z")
+        #check_nan(res_phase_adv, "res_phase_adv")
+        #check_nan(res_conti, "res_conti")
 
         # plot RBA
         #plot_data_sample(self.x, self.y, self.z, RBA_mom_x, 0.8, 1.2)
@@ -578,9 +539,7 @@ class HGPIFuNet(BasePIFuNet):
         loss_momentum_x = F.mse_loss(res_momentum_x, torch.zeros_like(res_momentum_x))
         loss_momentum_y = F.mse_loss(res_momentum_y, torch.zeros_like(res_momentum_y))
         loss_momentum_z = F.mse_loss(res_momentum_z, torch.zeros_like(res_momentum_z))
-
         phase_adv_loss = F.mse_loss(res_phase_adv, torch.zeros_like(res_phase_adv))
-
         conti_loss = F.mse_loss(res_conti, torch.zeros_like(res_conti))
 
         return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z

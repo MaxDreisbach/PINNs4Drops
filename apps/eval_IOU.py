@@ -30,8 +30,8 @@ def train(opt):
     # set cuda
     cuda = torch.device('cuda:%d' % opt.gpu_id)
 
-    train_dataset = EvalDataset(opt, phase='train')
-    test_dataset = EvalDataset(opt, phase='test')
+    train_dataset = TrainDataset(opt, phase='train')
+    test_dataset = TrainDataset(opt, phase='test')
 
     projection_mode = train_dataset.projection_mode
 
