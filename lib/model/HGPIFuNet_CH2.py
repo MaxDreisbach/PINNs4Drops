@@ -61,7 +61,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
             projection_mode=projection_mode,
             error_term=error_term)
 
-        self.name = 'hgpifu-PINN'
+        self.name = 'PF-IcPINNs-MIM'
         self.opt = opt
         self.root = self.opt.dataroot
         print(self.root)
@@ -483,11 +483,6 @@ class HGPIFuNet_CH2(BasePIFuNet):
         '''
         res_phi = phi - (lambda_CH / self.epsilon ** 2) * C * (C ** 2 - 1) - lambda_CH * laplacian_C
         #print('res_phi mean: ', res_phi.mean().item(), 'max: ', res_phi.max().item(), 'min: ', res_phi.min().item())
-
-        phi_xx = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.x, n=2))
-        phi_yy = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.y, n=2))
-        phi_zz = self.diff_xyz_de_norm(self.nth_derivative(phi, wrt=self.z, n=2))
-        laplacian_phi = phi_xx + phi_yy + phi_zz
 
         # surface tension (sigma already contained in phi -> division)
         f_sigma_x = (one_We / self.sigma) * phi * C_x
