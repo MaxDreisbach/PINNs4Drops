@@ -82,7 +82,9 @@ class HGPIFuNet_CH2(BasePIFuNet):
             filter_channels=self.opt.mlp_dim_CH2,
             num_views=self.opt.num_views,
             no_residual=self.opt.no_residual,
-            last_op=nn.Sigmoid())
+            last_op=nn.Sigmoid(),
+            LAAF_scale=opt.LAAF_scale,
+            LAAF_mode=opt.LAAF_mode)
 
         self.normalizer = DepthNormalizer(opt)
 

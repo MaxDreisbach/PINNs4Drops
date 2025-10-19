@@ -8,8 +8,8 @@ import os
 from torch.autograd import grad
 
 from .BasePIFuNet import BasePIFuNet
-from .SurfaceClassifier import SurfaceClassifier
-from .SurfaceClassifier_LAAF import SurfaceClassifier_LAAF
+from .SurfaceClassifier_CH2 import SurfaceClassifier_CH2
+from .SurfaceClassifier_LAAF_CH2 import SurfaceClassifier_LAAF_CH2
 from .DepthNormalizer import DepthNormalizer
 from .HGFilters import *
 from ..net_util import init_net
@@ -39,7 +39,7 @@ def write_log(value, name):
         outfile.write('{0},\n'.format(value.item()))
 
 
-class HGPIFuNet_CH(BasePIFuNet):
+class HGPIFuNet_CH2(BasePIFuNet):
     '''
     HG PIFu network uses Hourglass stacks as the image filter.
     It does the following:
@@ -57,7 +57,7 @@ class HGPIFuNet_CH(BasePIFuNet):
                  projection_mode='orthogonal',
                  error_term=nn.MSELoss(),
                  ):
-        super(HGPIFuNet_CH, self).__init__(
+        super(HGPIFuNet_CH2, self).__init__(
             projection_mode=projection_mode,
             error_term=error_term)
 
@@ -77,14 +77,27 @@ class HGPIFuNet_CH(BasePIFuNet):
                 for parameter in layer.parameters():
                     parameter.requires_grad = False
 
-
-        print('Using layer-wise adaptive activation functions PIFuNet')
-        self.surface_classifier = SurfaceClassifier_LAAF(
-            filter_channels=self.opt.mlp_dim,
-            num_views=self.opt.num_views,
-            no_residual=self.opt.no_residual,
-            last_op=nn.Sigmoid(),
-            LAAF_scale=2.0)
+        
+        if not opt.use_FF:
+            print('Using layer-wise adaptive activation functions PIFuNet')
+            self.surface_classifier = SurfaceClassifier_LAAF(
+                filter_channels=self.opt.mlp_dim,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid(),
+                LAAF_scale=opt.LAAF_scale,
+                LAAF_mode=opt.LAAF_mode)
+        else:
+            print('Using Fourier features & layer-wise adaptive activation functions PIFuNet')
+            self.surface_classifier = SurfaceClassifier_LAAF_FF(
+                filter_channels=self.opt.mlp_dim_FF,
+                num_views=self.opt.num_views,
+                no_residual=self.opt.no_residual,
+                last_op=nn.Sigmoid(),
+                LAAF_scale=2.0,
+                num_dims=3,
+                encoding_dim=128,
+                encoding_scale=10)         
         
 
         self.normalizer = DepthNormalizer(opt)
@@ -193,6 +206,10 @@ class HGPIFuNet_CH(BasePIFuNet):
         p_dim = p * self.rho_ref * self.U_ref ** 2
 
         return torch.stack((alpha, u_dim, v_dim, w_dim, p_dim), dim=1)
+
+    def get_phi_pred(self):
+        # retrieve data for phi
+        return self.pred[:, 5:6, :]
 
 
     def filter(self, images):
@@ -525,6 +542,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         res_momentum_y = res_momentum_y * mask
         res_momentum_z = res_momentum_z * mask
         res_phase_adv = res_phase_adv * mask
+        res_phi = res_phi * mask
         res_conti = res_conti * mask
 
         # get RBA update with local Lagrange multipliers
@@ -532,6 +550,7 @@ class HGPIFuNet_CH(BasePIFuNet):
         res_momentum_y, RBA_mom_y = self.get_RBA_residual(res_momentum_y)
         res_momentum_z, RBA_mom_z = self.get_RBA_residual(res_momentum_z)
         res_phase_adv, RBA_phase_adv = self.get_RBA_residual(res_phase_adv)
+        res_phi, RBA_phi = self.get_RBA_residual(res_phi)
         res_conti, RBA_conti = self.get_RBA_residual(res_conti)
 
         # plot RBA
@@ -550,7 +569,7 @@ class HGPIFuNet_CH(BasePIFuNet):
 
         conti_loss = F.mse_loss(res_conti, torch.zeros_like(res_conti))
 
-        return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z, eps_loss
+        return conti_loss, phase_adv_loss, loss_momentum_x, loss_momentum_y, loss_momentum_z, eps_loss, phi_loss
 
     def forward(self, images, points, calibs, transforms=None, labels=None, uvwp_points=None, residual_points=None, labels_u=None,
                 labels_v=None, labels_w=None, labels_p=None, time_step=None, get_PINN_loss=True):
@@ -588,4 +607,4 @@ class HGPIFuNet_CH(BasePIFuNet):
             loss_momentum_z = loss_data_alpha * 0
             return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z
 
-        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, self.epsilon
+        return res, res_PINN, loss_data_alpha, loss_data_u, loss_data_v, loss_data_w, loss_data_p, loss_conti, loss_phase_conv, loss_momentum_x, loss_momentum_y, loss_momentum_z, loss_eps, self.epsilon, phi_loss

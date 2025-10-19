@@ -91,6 +91,9 @@ class BaseOptions():
                              type=int, help='# of dimensions of color mlp')
         g_model.add_argument('--time_intervals', nargs='+', default=[0.6952, 6.01836, 12.8682, 19.7863],
                              type=int, help='# ')
+        g_model.add_argument('--LAAF_mode', type=str, default='layerwise',
+                             help='Mode of adaptive activation functions - layerwise || neuronwise || none (standard linear layer)')
+        g_model.add_argument('--LAAF_scale', type=float, default=2.0, help='Scale of adaptive activation functions')
         g_model.add_argument('--use_tanh', action='store_true',
                              help='using tanh after last conv of image_filter network')
 

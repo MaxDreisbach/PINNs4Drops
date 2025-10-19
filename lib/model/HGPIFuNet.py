@@ -69,7 +69,7 @@ class HGPIFuNet(BasePIFuNet):
             projection_mode=projection_mode,
             error_term=error_term)
 
-        self.name = 'hgpifu-PINN'
+        self.name = 'VoF-IcPINNs'
         self.opt = opt
         self.root = self.opt.dataroot
         print(self.root)
@@ -94,7 +94,8 @@ class HGPIFuNet(BasePIFuNet):
                 num_views=self.opt.num_views,
                 no_residual=self.opt.no_residual,
                 last_op=nn.Sigmoid(),
-                LAAF_scale=2.0)
+                LAAF_scale=opt.LAAF_scale,
+                LAAF_mode=opt.LAAF_mode)
         else:
             print('Using Fourier features & layer-wise adaptive activation functions PIFuNet')
             self.surface_classifier = SurfaceClassifier_LAAF_FF(

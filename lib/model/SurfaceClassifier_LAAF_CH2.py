@@ -5,7 +5,7 @@ from .AdaptiveConv1d import AdaptiveConv1d
 
 
 class SurfaceClassifier_LAAF_CH2(nn.Module):
-    def __init__(self, filter_channels, num_views=1, no_residual=True, last_op=None, LAAF_scale=2.0):
+    def __init__(self, filter_channels, num_views=1, no_residual=True, last_op=None, LAAF_scale=2.0, LAAF_mode='layerwise'):
         super(SurfaceClassifier_LAAF_CH2, self).__init__()
 
         self.filters = []
@@ -23,7 +23,7 @@ class SurfaceClassifier_LAAF_CH2(nn.Module):
                     1,
                     adaptive_rate=1 / self.LAAF_scale,
                     adaptive_rate_scaler=self.LAAF_scale,
-                    mode='layerwise'
+                    mode=LAAF_mode
                 ))
                 self.add_module("conv%d" % l, self.filters[l])
         else:
@@ -36,7 +36,7 @@ class SurfaceClassifier_LAAF_CH2(nn.Module):
                         1,
                         adaptive_rate=1 / self.LAAF_scale,
                         adaptive_rate_scaler=self.LAAF_scale,
-                        mode='layerwise'
+                        mode=LAAF_mode
                     ))
                 else:
                     self.filters.append(AdaptiveConv1d(
@@ -45,11 +45,10 @@ class SurfaceClassifier_LAAF_CH2(nn.Module):
                         1,
                         adaptive_rate=1 / self.LAAF_scale,
                         adaptive_rate_scaler=self.LAAF_scale,
-                        mode='layerwise'
+                        mode=LAAF_mode
                     ))
 
                 self.add_module("conv%d" % l, self.filters[l])
-
 
     def forward(self, im_feat, x_feat, y_feat, z_feat, t_feat):
         '''
