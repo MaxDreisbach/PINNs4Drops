@@ -1,4 +1,4 @@
-# PINNs4Drops: Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows
+# PINNs4Drops: Video-conditioned physics-informed neural networks for two-phase flow reconstruction
 
 [![Preprint](https://img.shields.io/badge/arxiv-preprint-blue)](https://arxiv.org/abs/2411.15949)
 
@@ -7,8 +7,8 @@ and Elham Kiyani (Division of Applied Mathematics - Brown University)
 
 [![Graphical Abstract](assets/Graphical_abstract.png)](https://arxiv.org/abs/2411.15949)
 
-This code allows the evalution and training of the physics-informed neural networks for spatio-temporal gas-liquid interface reconstruction in two-phase flows as presented 
-in our article ["Convolutional feature-enhanced physics-informed neural networks for reconstructing two-phase flows"](https://arxiv.org/abs/2411.15949).
+This repository contains the code for training and evalution of video-conditioned physics-informed neural networks (VcPINNs) and image-conditioned PINNs (IcPINNs) as presented 
+in our article ["PINNs4Drops: Video-conditioned physics-informed neural networks for two-phase flow reconstruction"](https://arxiv.org/abs/2411.15949).
 
 The datasets used in this work, as well as the weights of the trained PINNs are available on [KITopen](https://doi.org/10.35097/mmnxkbqqeye8p5tx)
 
