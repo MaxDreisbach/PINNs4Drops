@@ -38,27 +38,24 @@ for training and data generation
 - Create conda environment from requirements.txt (`conda create --name <env> --file requirements.txt`)
 - Download pre-processed glare-point shadowgraphy images from [KITopen](https://doi.org/10.35097/mmnxkbqqeye8p5tx)
 - OR use processing scripts on own data (see [GPS-Processing GitHub](https://github.com/MaxDreisbach/GPS-Processing))
-- Download network weights and move the file to `./PINNs4Drops/checkpoints/`
+- Download network weights and move the file to `./PINNs4Drops/VcPINNs/checkpoints/` or `./PINNs4Drops/IcPINNs/checkpoints/`
 - OR train the network on new data (see below)
 - Run eval.py for volumetric reconstruction (see below)
 - Open .obj file of reconstructed interface in Meshlab, Blender, or any 3D visualization software 
 
 ## Evaluation
 This script reconstructs the 3D gas-liquid interface, as well as the 3D pressure distribution and the three components of the velocity vector for each time step.
-For the evaluation of VOF-PINNsv1
+For the evaluation of VoF-VcPINNs from `./PINNs4Drops/VcPINNs/`
 ```python -m apps.eval --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}```
 
 The reconstruction requires for each time step an image in `path_to_processed_image_data` and a `.txt` file containing a decimal number that indicates the physical time.
 (Run `python -m apps.extract_timestep_test_data.py` to generate time step labels for new datasets)
 
-The reconstruction results are saved under `./PIFu/results/name_of_experiment` and contain an `.obj` file representing the 3D gas-liquid interface and `.vtk` files containing the inferred velocity and pressure fields.
+The reconstruction results are saved under `./results/name_of_experiment` and contain an `.obj` file representing the 3D gas-liquid interface and `.vtk` files containing the inferred velocity and pressure fields.
 Additional plotting 2D slices of the predicted fields maybe be activated in `./lib/train_util/`. Further plotting options can be adjusted in `./lib/plotting/`. \
 The resolution of the reconstruction can be controlled with the flag `--resolution {res}`, with a default value of 512.
 
-For the evaluation of PF-PINNsv1 run 
-`python -m apps.eval_CH --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
-
-For the evaluation of PF-PINNsv2 run 
+For the evaluation of PF-VcPINNs run 
 `python -m apps.eval_CH2 --name {name of experiment} --test_folder_path {path to processed image data} --dataroot {path to dataset with flow_case.json} --load_netG_checkpoint_path {path to network weights}`
 
 ## Data Generation (Linux Only)
