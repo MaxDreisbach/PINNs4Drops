@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="6c0f169f-265d-41a1-b1f3-df96b4305aa7" name="Default Changelist" comment="&quot;moved IcPINNs code to subdirectory&quot;" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="fbdb7170b6ce8e29adc6c750ba15a04a5592ba47" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RESET_MODE" value="MIXED" />
+    <option name="UPDATE_TYPE" value="REBASE" />
+  </component>
+  <component name="GithubPullRequestsUISettings">
+    <option name="hiddenUrls">
+      <set>
+        <option value="https://github.com/MaxDreisbach/PINNs4Drops" />
+      </set>
+    </option>
+  </component>
+  <component name="ProjectId" id="2vclzrKItePkVWaoy5gfvJNKpJZ" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="TODO_SCOPE" value="All Places" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/../../T-PINN-PIFu-bubble_25102025/lib/model/HGPIFuNet.py" />
+  </component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\maxdr\Desktop\PINNs4Drops\PINNs4Drops\apps" />
+      <recent name="C:\Users\maxdr\Desktop\PINNs4Drops\PINNs4Drops\lib\model" />
+    </key>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="6c0f169f-265d-41a1-b1f3-df96b4305aa7" name="Default Changelist" comment="" />
+      <created>1744452508443</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1744452508443</updated>
+    </task>
+    <task id="LOCAL-00001" summary="- Updated locally adaptive activation functions (now supports neuron-wise and layer-wise LAAF, 1D-conv)&#10;- Sampling of data points for phase distribution, velocity &amp; pressure, and residual points now can be adjusted independently&#10;- Plotting in depth direction now displays in the expected orientation">
+      <created>1744454112676</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1744454112676</updated>
+    </task>
+    <task id="LOCAL-00002" summary="- Updated locally adaptive activation functions (now supports neuron-wise and layer-wise LAAF, 1D-conv)&#10;- Sampling of data points for phase distribution, velocity &amp; pressure, and residual points now can be adjusted independently&#10;- Plotting in depth direction now displays in the expected orientation">
+      <created>1744454145282</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1744454145282</updated>
+    </task>
+    <task id="LOCAL-00003" summary="- streamlined data normalization&#10;- optimized implementation of adaptive activation functions (1D conv instead of linear layer)&#10;- optimized implementation of SoftAdapt&#10;- parallelized solid domain mask calculation">
+      <created>1760352228573</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1760352228573</updated>
+    </task>
+    <task id="LOCAL-00004" summary="- implemented previous updates in HGPIFuNet_CH2.py to HGPIFuNet_CH.py">
+      <created>1760773416892</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1760773416892</updated>
+    </task>
+    <task id="LOCAL-00005" summary="- changed implementation of adaptive activation functions in MLP from linear layers to 1D conv">
+      <created>1760775202235</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1760775202235</updated>
+    </task>
+    <task id="LOCAL-00006" summary="- added adaptive activation functions to options.py">
+      <created>1760861247761</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1760861247761</updated>
+    </task>
+    <task id="LOCAL-00007" summary="&quot;moved IcPINNs code to subdirectory&quot;">
+      <created>1764587378876</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1764587378876</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+    <option name="oldMeFiltersMigrated" value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="- Updated locally adaptive activation functions (now supports neuron-wise and layer-wise LAAF, 1D-conv)&#10;- Sampling of data points for phase distribution, velocity &amp; pressure, and residual points now can be adjusted independently&#10;- Plotting in depth direction now displays in the expected orientation" />
+    <MESSAGE value="- streamlined data normalization&#10;- optimized implementation of adaptive activation functions (1D conv instead of linear layer)&#10;- optimized implementation of SoftAdapt&#10;- parallelized solid domain mask calculation" />
+    <MESSAGE value="- implemented previous updates in HGPIFuNet_CH2.py to HGPIFuNet_CH.py" />
+    <MESSAGE value="- changed implementation of adaptive activation functions in MLP from linear layers to 1D conv" />
+    <MESSAGE value="- added adaptive activation functions to options.py" />
+    <MESSAGE value="&quot;moved IcPINNs code to subdirectory&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;moved IcPINNs code to subdirectory&quot;" />
+  </component>
+</project>
