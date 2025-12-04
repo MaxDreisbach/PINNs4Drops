@@ -157,7 +157,7 @@ class HGPIFuNet_CH2(BasePIFuNet):
 
 
     def nth_derivative(self,f, wrt, n):
-        f = f[:, :, self.n_data*2:]
+        #f = f[:, :, self.n_data*2:]
         #wrt = wrt[:, :, self.n_data*2:]
         for i in range(n):
             grads = grad(f, wrt, grad_outputs=torch.ones_like(f), create_graph=True, allow_unused=True)[0]
